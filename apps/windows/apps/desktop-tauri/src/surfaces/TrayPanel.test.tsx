@@ -371,16 +371,17 @@ describe("TokenCue handoff tray panel", () => {
     });
   });
 
-  it("closes from both the titlebar control and footer without opening the retired PopOut surface", async () => {
+  it("closes from the single titlebar control without opening the retired PopOut surface", async () => {
     renderTrayPanel([provider("claude", "Claude", 35)]);
 
+    // The footer used to carry a second close button beside the titlebar one;
+    // Windows puts exactly one close affordance in the caption.
     const closeButtons = await screen.findAllByRole("button", { name: "Close" });
-    expect(closeButtons).toHaveLength(2);
+    expect(closeButtons).toHaveLength(1);
     fireEvent.click(closeButtons[0]);
-    fireEvent.click(closeButtons[1]);
 
     await waitFor(() => {
-      expect(tauriMocks.dismissTrayPanel).toHaveBeenCalledTimes(2);
+      expect(tauriMocks.dismissTrayPanel).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -785,10 +786,11 @@ describe("TokenCue handoff tray panel", () => {
     expect(screen.queryByText("No spend data yet.")).not.toBeInTheDocument();
   });
 
-  it("keeps the shortcut chip wired to refresh", async () => {
+  it("keeps the Ctrl+R hint on the refresh button", async () => {
     renderTrayPanel([provider("codex", "Codex", 40)]);
     const refresh = await screen.findByRole("button", { name: "Refresh" });
-    expect(refresh).toHaveTextContent("Ctrl R");
+    // The label moved from a text chip into the icon button's tooltip.
+    expect(refresh).toHaveAttribute("title", expect.stringContaining("Ctrl+R"));
   });
 
   it("jumps to a provider card from the footer switcher", async () => {

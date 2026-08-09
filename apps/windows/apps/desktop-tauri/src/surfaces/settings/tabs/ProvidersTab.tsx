@@ -12,7 +12,7 @@ import { useProviders } from "../../../hooks/useProviders";
 import { reorderProviders } from "../../../lib/tauri";
 import { ProviderDetailPane } from "../providers/ProviderDetailPane";
 import { ProviderIcon } from "../../../components/providers/ProviderIcon";
-import { getProviderIcon } from "../../../components/providers/providerIcons";
+import { providerTileStyle } from "../../../components/providers/providerIcons";
 import type { LocaleKey } from "../../../i18n/keys";
 
 interface ProvidersTabProps {
@@ -104,10 +104,10 @@ function ProviderOverviewRow({
         onClick={onOpen}
       >
         <span
-          className="provider-overview__brand"
-          style={{ background: getProviderIcon(provider.id).brandColor }}
+          className="provider-tile provider-overview__brand"
+          style={providerTileStyle(provider.id)}
         >
-          <ProviderIcon providerId={provider.id} size={18} />
+          <ProviderIcon providerId={provider.id} size={15} />
         </span>
         <span>
           <strong>{provider.displayName}</strong>

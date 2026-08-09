@@ -30,7 +30,7 @@ export function IdentitySection({ provider, subtitle, t }: Props) {
   return (
     <header className="provider-detail-header-block">
       <div className="provider-detail-header">
-        <ProviderIcon providerId={provider.id} size={28} />
+        <ProviderIcon providerId={provider.id} size={28} tile />
         <div className="provider-detail-title-group">
           <div className="provider-detail-title">{provider.displayName}</div>
           <div className="provider-detail-subtitle">{subtitle}</div>
