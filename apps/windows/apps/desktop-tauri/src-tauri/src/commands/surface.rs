@@ -59,16 +59,13 @@ pub async fn open_settings_window(app: tauri::AppHandle, tab: String) -> Result<
     crate::shell::settings_window::open_or_focus(&app, &tab)
 }
 
-/// Open (or focus) the detached flyout ("Pop Out Dashboard") window.
+/// Open (or focus) the detached, fixed-height flyout window.
 ///
-/// Used by `PopOutPanel`'s "back to tray" action, which previously called
-/// `set_surface_mode("trayPanel", ...)` on the shared window — now that the
-/// flyout is its own window, that action opens it directly instead.  Same
-/// `async` requirement as `open_settings_window`: `WebviewWindowBuilder::build`
-/// deadlocks inside synchronous Tauri commands on Windows.
+/// This also hides the legacy shared main window defensively, so old saved
+/// surface state can never leave the retired PopOut dashboard visible.
 #[tauri::command]
 pub async fn open_flyout_window(app: tauri::AppHandle) -> Result<(), String> {
-    crate::shell::flyout_window::open_or_focus(&app, None)
+    crate::open_fixed_flyout(&app)
 }
 
 /// Reveal the flyout window after the frontend's first layout pass. Called by

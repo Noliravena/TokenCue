@@ -46,18 +46,18 @@ impl SurfaceMode {
                 blur_dismiss: false,
                 skip_taskbar: true,
             },
-            // TrayPanel is the "Pop Out Dashboard" flyout: anchored above the
-            // tray icon, always-on-top, auto-hides on click-outside (blur), and
-            // never shows in the taskbar. The frontend immediately content-sizes
-            // it; these values only provide the hidden bootstrap geometry.
+            // TrayPanel is the fixed-size tray flyout: anchored directly above
+            // the taskbar, always-on-top, auto-hides on click-outside (blur),
+            // and never shows in the taskbar. Every tab shares this height; any
+            // overflow scrolls inside the content region.
             Self::TrayPanel => WindowProperties {
                 visible: true,
                 decorations: false,
-                resizable: true,
+                resizable: false,
                 width: 380.0,
-                height: 200.0,
-                min_width: Some(380.0),
-                min_height: Some(120.0),
+                height: 600.0,
+                min_width: None,
+                min_height: None,
                 always_on_top: true,
                 blur_dismiss: true,
                 skip_taskbar: true,
@@ -266,20 +266,20 @@ mod tests {
     fn tray_panel_properties() {
         let props = SurfaceMode::TrayPanel.window_properties();
         assert_eq!(props.width, 380.0);
-        assert_eq!(props.height, 200.0);
+        assert_eq!(props.height, 600.0);
     }
 
     #[test]
-    fn tray_panel_is_resizable_blur_dismiss_flyout() {
+    fn tray_panel_is_fixed_blur_dismiss_flyout() {
         let props = SurfaceMode::TrayPanel.window_properties();
-        // "Pop Out Dashboard" flyout: resizable, anchored, auto-hide, no taskbar.
-        assert!(props.resizable);
+        // Fixed tray dialog: anchored, auto-hide, no taskbar.
+        assert!(!props.resizable);
         assert!(props.blur_dismiss);
         assert!(props.always_on_top);
         assert!(props.skip_taskbar);
         assert!(!props.decorations);
-        assert_eq!(props.min_width, Some(380.0));
-        assert_eq!(props.min_height, Some(120.0));
+        assert_eq!(props.min_width, None);
+        assert_eq!(props.min_height, None);
     }
 
     #[test]

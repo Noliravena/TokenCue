@@ -10,12 +10,14 @@ use tauri::{AppHandle, Manager};
 use tokencue::core::ProviderId;
 use tokencue::settings::{MetricPreference, Settings, TrayIconMode};
 
-use tokencue::tray::{render_bar_icon_rgba, render_percent_icon_rgba};
+use tokencue::tray::render_percent_icon_rgba;
 
 use crate::shell;
 use crate::state::{AppState, TrayAnchor};
+
+const TRAY_BRAND_ICON_BYTES: &[u8] = include_bytes!("../../../../rust/icons/tray-icon.png");
+#[cfg(test)]
 use crate::surface::SurfaceMode;
-use crate::surface_target::SurfaceTarget;
 #[cfg(test)]
 use crate::tray_menu::build_tray_menu;
 use crate::tray_menu::{TrayMenuEntry, build_tray_menu_with};
@@ -147,34 +149,10 @@ fn build_native_tray_menu(
     Menu::with_items(app, &item_refs)
 }
 
-fn resolve_menu_target(id: &str) -> Option<shell::ShellTransitionRequest> {
-    match id {
-        // "Show Window" — the full draggable window (PopOut mode), unchanged.
-        "show_panel" => Some(shell::ShellTransitionRequest {
-            mode: SurfaceMode::PopOut,
-            target: SurfaceTarget::Dashboard,
-            position: None,
-        }),
-        // NOTE: "pop_out" ("Pop Out Dashboard") is NOT handled here — it opens
-        // the dedicated flyout window (MenuAction::OpenFlyout in
-        // resolve_menu_action below), not a `shell::ShellTransitionRequest`
-        // against the `main`-window surface-mode machine. `SurfaceMode::TrayPanel`
-        // remains as a data key (geometry-key / window_properties source /
-        // panel-size reference) but `main` no longer transitions into it.
-        _ if id.starts_with("provider:") => Some(shell::ShellTransitionRequest {
-            mode: SurfaceMode::PopOut,
-            target: SurfaceTarget::parse(id)?,
-            position: None,
-        }),
-        _ => None,
-    }
-}
-
 enum MenuAction {
-    Transition(shell::ShellTransitionRequest),
     /// Open Settings/About in a detached window.
     OpenSettings(String),
-    /// Open (or focus) the dedicated flyout ("Pop Out Dashboard") window.
+    /// Open (or focus) the redesigned fixed-height flyout window.
     OpenFlyout,
     Refresh,
     /// Toggle the enabled/disabled state of the provider with the given CLI name.
@@ -184,11 +162,6 @@ enum MenuAction {
     Quit,
 }
 
-enum MenuTransitionDispatch {
-    Transition(shell::ShellTransitionRequest),
-    Reopen(shell::ShellTransitionRequest),
-}
-
 fn resolve_menu_action(id: &str) -> Option<MenuAction> {
     match id {
         "refresh" => Some(MenuAction::Refresh),
@@ -196,27 +169,12 @@ fn resolve_menu_action(id: &str) -> Option<MenuAction> {
         "settings" => Some(MenuAction::OpenSettings("general".into())),
         "about" => Some(MenuAction::OpenSettings("about".into())),
         "toggle_float_bar" => Some(MenuAction::ToggleFloatBar),
-        "pop_out" => Some(MenuAction::OpenFlyout),
+        "show_panel" => Some(MenuAction::OpenFlyout),
         _ if id.starts_with("toggle_provider:") => {
             let provider_id = id["toggle_provider:".len()..].to_string();
             Some(MenuAction::ToggleProvider(provider_id))
         }
-        _ => resolve_menu_target(id).map(MenuAction::Transition),
-    }
-}
-
-fn resolve_menu_transition_dispatch(
-    id: &str,
-    request: shell::ShellTransitionRequest,
-) -> MenuTransitionDispatch {
-    if id == "show_panel" {
-        MenuTransitionDispatch::Reopen(shell::ShellTransitionRequest {
-            mode: request.mode,
-            target: request.target,
-            position: None,
-        })
-    } else {
-        MenuTransitionDispatch::Transition(request)
+        _ => None,
     }
 }
 
@@ -247,9 +205,9 @@ fn store_anchor(app: &AppHandle, rect: &tauri::Rect, click_position: tauri::Phys
 pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let menu = build_native_tray_menu(app.handle(), &crate::commands::get_provider_catalog(), &[])?;
 
-    // Embed the icon at compile time so it works regardless of working directory.
-    let icon_bytes = include_bytes!("../../../../rust/icons/icon.png");
-    let icon = Image::from_bytes(icon_bytes)?;
+    // The system tray uses the dense 16px TokenCue brand mark from the design
+    // handoff. Keep it separate from the full-colour desktop application icon.
+    let icon = Image::from_bytes(TRAY_BRAND_ICON_BYTES)?;
 
     let _tray = TrayIconBuilder::with_id("tokencue-main")
         .icon(icon)
@@ -268,13 +226,11 @@ pub fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                 let app = tray.app_handle();
                 if button == MouseButton::Left && button_state == MouseButtonState::Up {
                     store_anchor(app, &rect, position);
-                    // Left-click toggles the dedicated flyout window (Pop Out
-                    // Dashboard): open it, or cleanly close it when this same
-                    // click already blur-dismissed it (no open→close flicker).
-                    // The full window stays available via "Show Window"
-                    // (SurfaceMode::PopOut on `main`) — the two now coexist as
-                    // separate OS windows instead of mutually-exclusive states
-                    // of one window. Called directly (not spawned): native
+                    // Left-click toggles the dedicated fixed-height flyout:
+                    // open it, or cleanly close it when this same click already
+                    // blur-dismissed it (no open→close flicker). "Show Window"
+                    // and normal launches now open this exact same window.
+                    // Called directly (not spawned): native
                     // tray-icon event callbacks run on the same main-thread
                     // event-loop context as `on_menu_event` below, where
                     // `settings_window::open_or_focus` is also called
@@ -324,38 +280,12 @@ fn schedule_tray_promotion_retries(app_handle: AppHandle) {
 /// Route a native menu-item click to the corresponding shell action.
 fn handle_menu_event(app: &AppHandle, id: &str) {
     match resolve_menu_action(id) {
-        Some(MenuAction::Transition(request)) => {
-            crate::auto_refresh::note_menu_open();
-            match resolve_menu_transition_dispatch(id, request) {
-                // Pass None so default_surface_position can use remembered PopOut
-                // geometry first, then fall back to tray/current-monitor placement.
-                MenuTransitionDispatch::Reopen(request) => {
-                    let _ = shell::reopen_to_target(
-                        app,
-                        request.mode,
-                        request.target,
-                        request.position,
-                    );
-                }
-                MenuTransitionDispatch::Transition(request) => {
-                    let _ = shell::transition_to_target(
-                        app,
-                        request.mode,
-                        request.target,
-                        request.position,
-                    );
-                }
-            }
-        }
         Some(MenuAction::OpenSettings(tab)) => {
             let _ = shell::settings_window::open_or_focus(app, &tab);
         }
         Some(MenuAction::OpenFlyout) => {
-            // Pass None: open_or_focus falls back to the tray-anchored
-            // default position (same placement chain the old TrayPanel
-            // transition used) when no explicit position is given.
             crate::auto_refresh::note_menu_open();
-            let _ = shell::flyout_window::open_or_focus(app, None);
+            let _ = crate::open_fixed_flyout(app);
         }
         Some(MenuAction::Refresh) => {
             let handle = app.clone();
@@ -488,8 +418,16 @@ pub fn update_tray_icon_and_tooltip(
         ),
     };
 
-    let (rgba, w, h) = render_tray_icon_for_settings(&settings, session_pct, weekly_pct, all_error);
-    let icon = Image::new_owned(rgba, w, h);
+    let icon = match render_tray_icon_for_settings(&settings, session_pct, weekly_pct, all_error) {
+        Some((rgba, w, h)) => Image::new_owned(rgba, w, h),
+        None => match Image::from_bytes(TRAY_BRAND_ICON_BYTES) {
+            Ok(icon) => icon,
+            Err(error) => {
+                tracing::warn!("Failed to decode embedded TokenCue tray icon: {error}");
+                return;
+            }
+        },
+    };
     let _ = tray.set_icon(Some(icon));
 
     // ── Tooltip ───────────────────────────────────────────────────────────
@@ -563,13 +501,16 @@ fn provider_status_label(
 fn render_tray_icon_for_settings(
     settings: &Settings,
     session_pct: f64,
-    weekly_pct: Option<f64>,
+    _weekly_pct: Option<f64>,
     all_error: bool,
-) -> (Vec<u8>, u32, u32) {
+) -> Option<(Vec<u8>, u32, u32)> {
     if settings.menu_bar_shows_percent {
-        render_percent_icon_rgba(session_pct, all_error)
+        Some(render_percent_icon_rgba(session_pct, all_error))
     } else {
-        render_bar_icon_rgba(session_pct, weekly_pct, all_error)
+        // Default mode is the exact dense brand mark from the design handoff.
+        // `None` tells the caller to use the embedded PNG instead of drawing a
+        // legacy usage glyph over it after every provider refresh.
+        None
     }
 }
 
@@ -922,101 +863,19 @@ mod tests {
     }
 
     #[test]
-    fn provider_menu_routes_to_provider_popout_target() {
-        let action = resolve_menu_target("provider:codex").expect("provider target");
-        assert_eq!(action.mode, SurfaceMode::PopOut);
-        assert_eq!(
-            action.target,
-            SurfaceTarget::Provider {
-                provider_id: "codex".into()
-            }
-        );
-    }
-
-    #[test]
-    fn pop_out_menu_routes_to_open_flyout_action() {
-        // "Pop Out Dashboard" opens the dedicated flyout window — not a
-        // `shell::ShellTransitionRequest` against the `main`-window surface
-        // machine — which is what lets it coexist with "Show Window"
-        // (SurfaceMode::PopOut, which stays on `main`) instead of the two
-        // being mutually-exclusive states of one window.
-        let action = resolve_menu_action("pop_out").expect("pop_out action");
+    fn every_dashboard_tray_menu_entry_routes_to_fixed_flyout() {
+        let action = resolve_menu_action("show_panel").expect("dashboard action");
         assert!(matches!(action, MenuAction::OpenFlyout));
+        assert!(resolve_menu_action("pop_out").is_none());
 
-        // resolve_menu_target no longer resolves "pop_out" at all — it is
-        // intercepted earlier in resolve_menu_action.
-        assert!(resolve_menu_target("pop_out").is_none());
+        // Legacy provider deep-link menu ids must not bypass the redesigned
+        // fixed-height flyout.
+        assert!(resolve_menu_action("provider:codex").is_none());
 
-        let show_window = resolve_menu_target("show_panel").expect("show_panel target");
-        assert_eq!(show_window.mode, SurfaceMode::PopOut);
-
-        // SurfaceMode::TrayPanel is retained purely as a data key (geometry
-        // key / window_properties source / panel-size reference) for the
-        // flyout window's builder — the properties themselves are unchanged.
         let props = SurfaceMode::TrayPanel.window_properties();
-        assert!(props.resizable && props.blur_dismiss && props.skip_taskbar);
-    }
-
-    #[test]
-    fn show_panel_menu_reopens_popout_dashboard_with_default_position_chain() {
-        let request = resolve_menu_target("show_panel").expect("show_panel target");
-        assert_eq!(request.mode, SurfaceMode::PopOut);
-        assert_eq!(request.target, SurfaceTarget::Dashboard);
-
-        let dispatch = resolve_menu_transition_dispatch(
-            "show_panel",
-            shell::ShellTransitionRequest {
-                mode: SurfaceMode::PopOut,
-                target: SurfaceTarget::Dashboard,
-                position: Some((320, 240)),
-            },
-        );
-
-        match dispatch {
-            MenuTransitionDispatch::Reopen(request) => {
-                assert_eq!(request.mode, SurfaceMode::PopOut);
-                assert_eq!(request.target, SurfaceTarget::Dashboard);
-                assert_eq!(request.position, None);
-            }
-            MenuTransitionDispatch::Transition(_) => {
-                panic!("show_panel should reopen via default PopOut positioning")
-            }
-        }
-    }
-
-    #[test]
-    fn non_show_panel_menu_keeps_explicit_position() {
-        // "pop_out" no longer reaches resolve_menu_transition_dispatch at all
-        // (it's intercepted as MenuAction::OpenFlyout in resolve_menu_action
-        // before falling through to resolve_menu_target); a provider deep
-        // link is the realistic surviving non-"show_panel" caller of this
-        // dispatch function today.
-        let dispatch = resolve_menu_transition_dispatch(
-            "provider:codex",
-            shell::ShellTransitionRequest {
-                mode: SurfaceMode::PopOut,
-                target: SurfaceTarget::Provider {
-                    provider_id: "codex".into(),
-                },
-                position: Some((320, 240)),
-            },
-        );
-
-        match dispatch {
-            MenuTransitionDispatch::Transition(request) => {
-                assert_eq!(request.mode, SurfaceMode::PopOut);
-                assert_eq!(
-                    request.target,
-                    SurfaceTarget::Provider {
-                        provider_id: "codex".into()
-                    }
-                );
-                assert_eq!(request.position, Some((320, 240)));
-            }
-            MenuTransitionDispatch::Reopen(_) => {
-                panic!("non-show-panel actions should use direct transitions")
-            }
-        }
+        assert_eq!((props.width, props.height), (380.0, 600.0));
+        assert!(!props.resizable);
+        assert!(props.blur_dismiss && props.skip_taskbar);
     }
 
     #[test]
@@ -1271,8 +1130,8 @@ mod tests {
     }
 
     #[test]
-    fn tray_icon_renderer_uses_percent_mode_when_enabled() {
-        let bar_settings = Settings {
+    fn tray_icon_renderer_uses_brand_mark_unless_percent_mode_is_enabled() {
+        let brand_settings = Settings {
             menu_bar_shows_percent: false,
             ..Settings::default()
         };
@@ -1281,13 +1140,19 @@ mod tests {
             ..Settings::default()
         };
 
-        let (bar, bar_w, bar_h) =
-            render_tray_icon_for_settings(&bar_settings, 72.0, Some(40.0), false);
-        let (percent, pct_w, pct_h) =
-            render_tray_icon_for_settings(&percent_settings, 72.0, Some(40.0), false);
+        assert!(render_tray_icon_for_settings(&brand_settings, 72.0, Some(40.0), false).is_none());
 
-        assert_eq!((bar_w, bar_h), (pct_w, pct_h));
-        assert_ne!(bar, percent);
+        let (percent, pct_w, pct_h) =
+            render_tray_icon_for_settings(&percent_settings, 72.0, Some(40.0), false).unwrap();
+
+        assert_eq!((pct_w, pct_h), (32, 32));
+        assert_eq!(percent.len(), (pct_w * pct_h * 4) as usize);
+    }
+
+    #[test]
+    fn embedded_tray_brand_icon_is_a_32px_png() {
+        let icon = Image::from_bytes(TRAY_BRAND_ICON_BYTES).expect("tray brand icon should decode");
+        assert_eq!((icon.width(), icon.height()), (32, 32));
     }
 
     #[test]

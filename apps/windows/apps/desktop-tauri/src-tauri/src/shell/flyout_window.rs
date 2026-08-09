@@ -1,10 +1,9 @@
-//! Detached "Pop Out Dashboard" flyout window: a resizable, always-on-top,
-//! tray-anchored panel that auto-hides on click-outside (blur-dismiss).
+//! Detached fixed-height flyout window: an always-on-top, tray-anchored panel
+//! that auto-hides on click-outside (blur-dismiss).
 //!
-//! Runs as an auxiliary Tauri window labeled `flyout`, independent of the
-//! `main` window's surface state machine — it coexists with "Show Window"
-//! (`SurfaceMode::PopOut`, which stays on `main`) instead of being a
-//! mutually-exclusive state of the same window.
+//! Runs as the one supported dashboard window labeled `flyout`. Desktop
+//! launch, repeat launch, tray left-click, and "Show Window" all converge on
+//! this window; the legacy PopOut surface on `main` is retired.
 //!
 //! Structurally modeled on `crate::floatbar` (self-contained module owning
 //! its window + a `handle_window_event` hook dispatched from `main.rs`
@@ -82,23 +81,16 @@ pub fn open_or_focus(app: &AppHandle, position: Option<(i32, i32)>) -> Result<()
         return Ok(());
     }
 
-    // Derive window properties from `SurfaceMode::TrayPanel.window_properties()`
-    // — the historical single source of truth for the flyout's shape (size,
-    // resizability, always-on-top, taskbar visibility). The variant is kept
-    // specifically so this builder (and the geometry-store key, and
-    // `default_surface_position`'s positioning branch) have one place to read
-    // from, rather than duplicating these values as independent constants
-    // that could silently drift from `surface.rs`.
+    // Derive the fixed flyout geometry from one source of truth. A legacy
+    // remembered user size may still exist on disk, but the redesigned tray
+    // deliberately ignores it so every tab opens at the same height.
     let props = SurfaceMode::TrayPanel.window_properties();
-    let (width, height) = stored_size()
-        .map(|(w, h)| (w as f64, h as f64))
-        .unwrap_or((props.width, props.height));
 
     let url = WebviewUrl::App("index.html?window=flyout".into());
 
     let mut builder = tauri::WebviewWindowBuilder::new(app, FLYOUT_LABEL, url)
         .title("TokenCue")
-        .inner_size(width, height)
+        .inner_size(props.width, props.height)
         .decorations(props.decorations)
         .transparent(true)
         .shadow(false)
@@ -107,8 +99,8 @@ pub fn open_or_focus(app: &AppHandle, position: Option<(i32, i32)>) -> Result<()
         .skip_taskbar(props.skip_taskbar)
         .theme(Some(tauri::Theme::Dark))
         // CRITICAL: dynamically-built windows default to drag-drop ENABLED,
-        // which intercepts the HTML5 draggable events the provider grid's
-        // drag-reorder (ProviderGrid.tsx) relies on — see `main`'s
+        // which intercepts the HTML5 draggable events used by provider
+        // drag-reorder — see `main`'s
         // `dragDropEnabled: false` in tauri.conf.json for why this must be
         // disabled explicitly on every window that hosts that grid.
         .disable_drag_drop_handler()
@@ -118,9 +110,13 @@ pub fn open_or_focus(app: &AppHandle, position: Option<(i32, i32)>) -> Result<()
     }
     let win = builder.build().map_err(|e| e.to_string())?;
 
-    // Force DWM caption dark; keep WS_THICKFRAME (resizable) like the
-    // Settings window.
-    super::dwm::force_dark_caption_resizable(&win);
+    // Strip the non-client caption without reintroducing a resize frame on the
+    // fixed tray dialog.
+    if props.resizable {
+        super::dwm::force_dark_caption_resizable(&win);
+    } else {
+        super::dwm::force_dark_caption(&win);
+    }
 
     let target_position =
         position.or_else(|| super::position::default_surface_position(app, SurfaceMode::TrayPanel));
@@ -364,15 +360,13 @@ mod tests {
         // `open_or_focus`'s builder reads size/decorations/resizable/
         // always_on_top/skip_taskbar/min-size from
         // `SurfaceMode::TrayPanel.window_properties()` directly (not
-        // independent duplicated constants) — this pins down the values that
-        // relationship depends on, so a change to `surface.rs` shows up here
-        // instead of silently drifting from what the flyout actually builds.
+        // independent duplicated constants) — this pins down the fixed shape.
         let props = SurfaceMode::TrayPanel.window_properties();
         assert_eq!(props.width, 380.0);
-        assert_eq!(props.height, 200.0);
-        assert_eq!(props.min_width, Some(380.0));
-        assert_eq!(props.min_height, Some(120.0));
-        assert!(props.resizable);
+        assert_eq!(props.height, 600.0);
+        assert_eq!(props.min_width, None);
+        assert_eq!(props.min_height, None);
+        assert!(!props.resizable);
         assert!(props.always_on_top);
         assert!(props.skip_taskbar);
         assert!(!props.decorations);

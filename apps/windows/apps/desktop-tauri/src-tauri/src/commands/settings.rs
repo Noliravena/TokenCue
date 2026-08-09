@@ -433,9 +433,9 @@ pub async fn update_settings(
         }
     }
 
-    // Notify other windows (PopOut dashboard, tray, float bar) so they re-read
+    // Notify other windows (fixed flyout, settings, float bar) so they re-read
     // settings live — e.g. the Display tab's window-scale slider takes effect
-    // immediately instead of only after the PopOut is reopened.
+    // immediately instead of only after the flyout is reopened.
     events::emit_settings_changed(&app);
     if refresh_provider_data {
         let app = app.clone();

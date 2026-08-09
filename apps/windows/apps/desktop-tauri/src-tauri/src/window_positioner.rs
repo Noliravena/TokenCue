@@ -116,6 +116,16 @@ pub fn calculate_panel_position(
     );
     let bounds_right = monitor_bounds.x + monitor_bounds.width as i32;
     let work_right = work_area.x + work_area.width as i32;
+    let bounds_bottom = monitor_bounds.y + monitor_bounds.height as i32;
+    let work_bottom = work_area.y + work_area.height as i32;
+
+    // A bottom-docked taskbar already supplies a hard visual boundary. Align
+    // the flyout directly to its top edge instead of stacking the generic 8px
+    // work-area safety margin on top of the taskbar.
+    if work_bottom < bounds_bottom {
+        let (_, ph) = physical_panel_size(panel_size, scale_factor);
+        return (position.0, work_bottom - ph);
+    }
 
     if work_area.x > monitor_bounds.x || work_right < bounds_right {
         let (_, ph) = physical_panel_size(panel_size, scale_factor);
@@ -239,6 +249,27 @@ mod tests {
         let monitor = hd_monitor();
         let (_, y) = calculate_panel_position(&icon, &monitor, &monitor, &panel(), 1.0);
         assert!(y < icon.y, "panel should sit above the icon");
+    }
+
+    #[test]
+    fn bottom_taskbar_panel_sits_flush_with_work_area() {
+        let monitor = hd_monitor();
+        let work_area = Rect {
+            x: 0,
+            y: 0,
+            width: 1920,
+            height: 1040,
+        };
+        let icon = Rect {
+            x: 1800,
+            y: 1048,
+            width: 24,
+            height: 24,
+        };
+
+        let (_, y) = calculate_panel_position(&icon, &monitor, &work_area, &panel(), 1.0);
+
+        assert_eq!(y + panel().height as i32, 1040);
     }
 
     #[test]

@@ -87,7 +87,7 @@ pub fn emit_codex_accounts_updated(app: &AppHandle) {
 }
 
 /// Broadcast to every window that persisted settings changed, so surfaces in
-/// other windows (e.g. the PopOut dashboard) re-read settings and re-render —
+/// other windows (e.g. the fixed flyout) re-read settings and re-render —
 /// the detached Settings window and the main window are separate webviews and
 /// do not share React state. Payload-less; listeners re-fetch the snapshot.
 pub fn emit_settings_changed(app: &AppHandle) {

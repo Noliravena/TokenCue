@@ -24,7 +24,6 @@ use std::sync::Mutex;
 
 use state::AppState;
 use surface::SurfaceMode;
-use surface_target::SurfaceTarget;
 use tauri::Manager;
 
 const PROOF_ACTIVATION_DELAY: Duration = Duration::from_millis(0);
@@ -32,7 +31,7 @@ const VISIBLE_START_ACTIVATION_DELAY: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct LaunchBehavior {
-    open_primary_window_at_start: bool,
+    open_fixed_flyout_at_start: bool,
     suppress_blur_dismiss: bool,
 }
 
@@ -43,15 +42,17 @@ fn should_hide_close_request(mode: SurfaceMode) -> bool {
     )
 }
 
-fn primary_window_request() -> shell::ShellTransitionRequest {
-    shell::ShellTransitionRequest {
-        mode: SurfaceMode::PopOut,
-        target: SurfaceTarget::Dashboard,
-        position: None,
+fn open_fixed_flyout(app: &tauri::AppHandle) -> Result<(), String> {
+    // The legacy PopOut lived on `main`. Hide that window defensively before
+    // opening the single supported dashboard surface so stale/deep-link state
+    // can never reveal the old UI beside the redesigned flyout.
+    if let Some(main) = app.get_webview_window("main") {
+        let _ = main.hide();
     }
+    shell::flyout_window::open_or_focus(app, None)
 }
 
-fn should_open_primary_window_from_args<I, S>(args: I) -> bool
+fn should_open_fixed_flyout_from_args<I, S>(args: I) -> bool
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
@@ -78,13 +79,13 @@ where
         .collect()
 }
 
-fn should_reopen_primary_window_from_instance_args<I, S>(args: I) -> bool
+fn should_open_fixed_flyout_from_instance_args<I, S>(args: I) -> bool
 where
     I: IntoIterator<Item = S>,
     S: AsRef<str>,
 {
     let args = nonblank_launch_args(args);
-    args.is_empty() || should_open_primary_window_from_args(&args)
+    args.is_empty() || should_open_fixed_flyout_from_args(&args)
 }
 
 fn launch_behavior<I, S>(force_visible: bool, start_minimized: bool, args: I) -> LaunchBehavior
@@ -93,12 +94,12 @@ where
     S: AsRef<str>,
 {
     let args = nonblank_launch_args(args);
-    let explicit_primary_launch = should_open_primary_window_from_args(&args);
+    let explicit_flyout_launch = should_open_fixed_flyout_from_args(&args);
     let plain_desktop_launch = args.is_empty();
 
     LaunchBehavior {
-        open_primary_window_at_start: force_visible
-            || explicit_primary_launch
+        open_fixed_flyout_at_start: force_visible
+            || explicit_flyout_launch
             || (plain_desktop_launch && !start_minimized),
         suppress_blur_dismiss: force_visible,
     }
@@ -129,10 +130,8 @@ fn main() {
         .plugin(shortcut_bridge::plugin())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
-            if should_reopen_primary_window_from_instance_args(args.iter().skip(1)) {
-                let request = primary_window_request();
-                let _ =
-                    shell::reopen_to_target(app, request.mode, request.target, request.position);
+            if should_open_fixed_flyout_from_instance_args(args.iter().skip(1)) {
+                let _ = open_fixed_flyout(app);
             }
         }))
         .invoke_handler(tauri::generate_handler![
@@ -243,17 +242,11 @@ fn main() {
                     tokio::time::sleep(PROOF_ACTIVATION_DELAY).await;
                     proof_harness::activate(&app_handle);
                 });
-            } else if launch.open_primary_window_at_start {
+            } else if launch.open_fixed_flyout_at_start {
                 let app = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(VISIBLE_START_ACTIVATION_DELAY).await;
-                    let request = primary_window_request();
-                    let _ = shell::reopen_to_target(
-                        &app,
-                        request.mode,
-                        request.target,
-                        request.position,
-                    );
+                    let _ = open_fixed_flyout(&app);
                 });
             }
 
@@ -378,77 +371,69 @@ mod tests {
     }
 
     #[test]
-    fn primary_window_request_targets_popout_dashboard() {
-        let request = primary_window_request();
-        assert_eq!(request.mode, SurfaceMode::PopOut);
-        assert_eq!(request.target, SurfaceTarget::Dashboard);
-        assert_eq!(request.position, None);
+    fn menubar_launch_arg_opens_fixed_flyout() {
+        assert!(should_open_fixed_flyout_from_args(["menubar"]));
+        assert!(should_open_fixed_flyout_from_args(["--tray-panel"]));
+        assert!(should_open_fixed_flyout_from_args(["/tray_panel"]));
     }
 
     #[test]
-    fn menubar_launch_arg_opens_primary_window() {
-        assert!(should_open_primary_window_from_args(["menubar"]));
-        assert!(should_open_primary_window_from_args(["--tray-panel"]));
-        assert!(should_open_primary_window_from_args(["/tray_panel"]));
-    }
-
-    #[test]
-    fn unrelated_launch_args_do_not_open_primary_window() {
-        assert!(!should_open_primary_window_from_args([
+    fn unrelated_launch_args_do_not_open_fixed_flyout() {
+        assert!(!should_open_fixed_flyout_from_args([
             "usage", "-p", "claude"
         ]));
-        assert!(!should_reopen_primary_window_from_instance_args([
+        assert!(!should_open_fixed_flyout_from_instance_args([
             "usage", "-p", "claude"
         ]));
         assert_eq!(
             launch_behavior(false, false, ["usage", "-p", "claude"]),
             LaunchBehavior {
-                open_primary_window_at_start: false,
+                open_fixed_flyout_at_start: false,
                 suppress_blur_dismiss: false,
             }
         );
     }
 
     #[test]
-    fn plain_desktop_launch_opens_unless_start_minimized() {
+    fn plain_desktop_launch_opens_fixed_flyout_unless_start_minimized() {
         assert_eq!(
             launch_behavior(false, false, std::iter::empty::<&str>()),
             LaunchBehavior {
-                open_primary_window_at_start: true,
+                open_fixed_flyout_at_start: true,
                 suppress_blur_dismiss: false,
             }
         );
         assert_eq!(
             launch_behavior(false, false, [""]),
             LaunchBehavior {
-                open_primary_window_at_start: true,
+                open_fixed_flyout_at_start: true,
                 suppress_blur_dismiss: false,
             }
         );
         assert_eq!(
             launch_behavior(false, false, ["  "]),
             LaunchBehavior {
-                open_primary_window_at_start: true,
+                open_fixed_flyout_at_start: true,
                 suppress_blur_dismiss: false,
             }
         );
         assert_eq!(
             launch_behavior(false, true, std::iter::empty::<&str>()),
             LaunchBehavior {
-                open_primary_window_at_start: false,
+                open_fixed_flyout_at_start: false,
                 suppress_blur_dismiss: false,
             }
         );
     }
 
     #[test]
-    fn single_instance_plain_launch_reopens_primary_window() {
-        assert!(should_reopen_primary_window_from_instance_args(
+    fn single_instance_plain_launch_opens_fixed_flyout() {
+        assert!(should_open_fixed_flyout_from_instance_args(
             std::iter::empty::<&str>()
         ));
-        assert!(should_reopen_primary_window_from_instance_args([""]));
-        assert!(should_reopen_primary_window_from_instance_args(["  "]));
-        assert!(should_reopen_primary_window_from_instance_args(["menubar"]));
+        assert!(should_open_fixed_flyout_from_instance_args([""]));
+        assert!(should_open_fixed_flyout_from_instance_args(["  "]));
+        assert!(should_open_fixed_flyout_from_instance_args(["menubar"]));
     }
 
     #[test]
@@ -456,7 +441,7 @@ mod tests {
         assert_eq!(
             launch_behavior(false, true, ["menubar"]),
             LaunchBehavior {
-                open_primary_window_at_start: true,
+                open_fixed_flyout_at_start: true,
                 suppress_blur_dismiss: false,
             }
         );
@@ -468,7 +453,7 @@ mod tests {
         assert_eq!(
             launch,
             LaunchBehavior {
-                open_primary_window_at_start: true,
+                open_fixed_flyout_at_start: true,
                 suppress_blur_dismiss: true,
             }
         );

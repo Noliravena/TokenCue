@@ -112,10 +112,6 @@ pub(crate) fn build_tray_menu_with(
         text(LocaleKey::TrayRefreshAll),
     ));
     menu.push(TrayMenuEntry::item(
-        "pop_out",
-        text(LocaleKey::TrayPopOutDashboard),
-    ));
-    menu.push(TrayMenuEntry::item(
         "show_panel",
         text(LocaleKey::TrayShowWindow),
     ));
