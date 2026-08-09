@@ -1,0 +1,7 @@
+{
+  "providerId": "fixture-provider",
+  "primaryUsedPercent": 46,
+  "secondaryUsedPercent": 72,
+  "loginMethod": "Fixture Pro",
+  "cost": { "used": 12.5, "limit": 25, "currency": "USD", "balance": 7.5 }
+}

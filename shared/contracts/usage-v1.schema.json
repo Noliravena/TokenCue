@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokencue.dev/contracts/usage-v1.schema.json",
+  "title": "TokenCue normalized provider snapshot",
+  "type": "object",
+  "required": ["schemaVersion", "providerId", "fetchedAt", "state", "windows", "accounts"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "providerId": { "type": "string" },
+    "fetchedAt": { "type": "string", "format": "date-time" },
+    "lastSuccessfulAt": { "type": ["string", "null"], "format": "date-time" },
+    "state": { "enum": ["fresh", "refreshing", "stale", "error"] },
+    "error": { "$ref": "#/$defs/error" },
+    "identity": { "$ref": "#/$defs/identity" },
+    "windows": { "type": "array", "items": { "$ref": "#/$defs/window" } },
+    "accounts": { "type": "array", "items": { "$ref": "#/$defs/account" } },
+    "balance": { "$ref": "#/$defs/money" },
+    "cost": { "$ref": "#/$defs/cost" },
+    "status": { "$ref": "#/$defs/status" },
+    "diagnostics": { "type": "object", "additionalProperties": true }
+  },
+  "$defs": {
+    "error": { "type": ["object", "null"], "properties": { "code": { "type": "string" }, "message": { "type": "string" }, "retryable": { "type": "boolean" } }, "required": ["code", "message", "retryable"], "additionalProperties": false },
+    "identity": { "type": ["object", "null"], "properties": { "accountId": { "type": ["string", "null"] }, "displayName": { "type": ["string", "null"] }, "plan": { "type": ["string", "null"] } }, "additionalProperties": false },
+    "window": { "type": "object", "required": ["id", "label", "usedPercent"], "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "usedPercent": { "type": "number", "minimum": 0 }, "resetsAt": { "type": ["string", "null"], "format": "date-time" }, "pacePercent": { "type": ["number", "null"] } }, "additionalProperties": false },
+    "account": { "type": "object", "required": ["id", "label", "windows"], "properties": { "id": { "type": "string" }, "label": { "type": "string" }, "windows": { "type": "array", "items": { "$ref": "#/$defs/window" } } }, "additionalProperties": false },
+    "money": { "type": ["object", "null"], "properties": { "amount": { "type": "number" }, "currency": { "type": "string", "pattern": "^[A-Z]{3}$" } }, "required": ["amount", "currency"], "additionalProperties": false },
+    "cost": { "type": ["object", "null"], "properties": { "period": { "type": "string" }, "groups": { "type": "array", "items": { "$ref": "#/$defs/money" } } }, "required": ["period", "groups"], "additionalProperties": false },
+    "status": { "type": ["object", "null"], "properties": { "level": { "enum": ["operational", "degraded", "outage", "unknown"] }, "message": { "type": ["string", "null"] }, "url": { "type": ["string", "null"], "format": "uri" } }, "required": ["level"], "additionalProperties": false }
+  },
+  "additionalProperties": false
+}

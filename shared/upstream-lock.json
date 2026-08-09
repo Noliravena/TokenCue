@@ -1,0 +1,20 @@
+{
+  "$schema": "./contracts/upstream-lock.schema.json",
+  "macos": {
+    "tag": "v0.48.0",
+    "commit": "5bd58785061136505c2ad8b5dbaa73c50e7bc191",
+    "role": "import-snapshot"
+  },
+  "windows": {
+    "stableTag": "v0.33.2",
+    "stableCommit": "6e51128e235c490857ca35f381463c8a5427e9ab",
+    "auditedCommit": "02971a7952ab45f9fde50808f28004a7239db320",
+    "role": "import-snapshot"
+  },
+  "policy": {
+    "followRollingBranches": false,
+    "requireHumanReview": true,
+    "requireContractGate": true,
+    "externalProductSync": false
+  }
+}

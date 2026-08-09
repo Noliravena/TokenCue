@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokencue.dev/contracts/upstream-lock.schema.json",
+  "type": "object",
+  "required": ["macos", "windows", "policy"],
+  "properties": {
+    "macos": {
+      "type": "object",
+      "required": ["tag", "commit"],
+      "properties": {
+        "tag": { "type": "string" },
+        "commit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "role": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "windows": {
+      "type": "object",
+      "required": ["stableTag", "stableCommit", "auditedCommit"],
+      "properties": {
+        "stableTag": { "type": "string" },
+        "stableCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "auditedCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+        "role": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "policy": {
+      "type": "object",
+      "required": ["followRollingBranches", "requireHumanReview", "requireContractGate"],
+      "properties": {
+        "followRollingBranches": { "type": "boolean" },
+        "requireHumanReview": { "type": "boolean" },
+        "requireContractGate": { "type": "boolean" },
+        "externalProductSync": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

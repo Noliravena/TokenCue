@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokencue.dev/contracts/plugin-output-v1.schema.json",
+  "title": "TokenCue provider plugin output v1",
+  "type": "object",
+  "properties": {
+    "primary": { "$ref": "#/$defs/window" },
+    "secondary": { "$ref": "#/$defs/windowOrNull" },
+    "modelSpecific": { "$ref": "#/$defs/windowOrNull" },
+    "tertiary": { "$ref": "#/$defs/windowOrNull" },
+    "extraWindows": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "window": { "$ref": "#/$defs/window" },
+          "usedPercent": { "type": "number" },
+          "windowMinutes": { "type": ["integer", "null"], "minimum": 1 },
+          "resetsAt": { "type": ["string", "null"], "format": "date-time" },
+          "resetDescription": { "type": ["string", "null"], "maxLength": 256 },
+          "nextRegenPercent": { "type": ["number", "null"] }
+        },
+        "anyOf": [
+          { "required": ["window"] },
+          { "required": ["usedPercent"] }
+        ],
+        "additionalProperties": false
+      }
+    },
+    "identity": {
+      "type": ["object", "null"],
+      "properties": {
+        "email": { "type": ["string", "null"], "maxLength": 256 },
+        "organization": { "type": ["string", "null"], "maxLength": 256 },
+        "loginMethod": { "type": ["string", "null"], "maxLength": 256 },
+        "accountID": { "type": ["string", "null"], "maxLength": 256 }
+      },
+      "additionalProperties": false
+    },
+    "subscriptionRenewsAt": { "type": ["string", "null"], "format": "date-time" },
+    "subscriptionExpiresAt": { "type": ["string", "null"], "format": "date-time" },
+    "dataConfidence": {
+      "type": "string",
+      "enum": ["exact", "estimated", "percentOnly", "unknown"]
+    },
+    "details": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": { "$ref": "#/$defs/detailSection" }
+    },
+    "cost": {
+      "type": ["object", "null"],
+      "required": ["used", "currency"],
+      "properties": {
+        "used": { "type": "number", "minimum": 0 },
+        "limit": { "type": ["number", "null"], "minimum": 0 },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+        "period": { "type": "string", "maxLength": 80 },
+        "resetsAt": { "type": ["string", "null"], "format": "date-time" },
+        "balance": { "type": ["number", "null"], "minimum": 0 },
+        "nextRegenAmount": { "type": ["number", "null"], "minimum": 0 }
+      },
+      "additionalProperties": false
+    }
+  },
+  "anyOf": [
+    { "required": ["primary"] },
+    { "required": ["secondary"] },
+    { "required": ["modelSpecific"] },
+    { "required": ["tertiary"] },
+    { "required": ["extraWindows"] },
+    { "required": ["cost"] },
+    { "required": ["details"] }
+  ],
+  "$defs": {
+    "windowOrNull": { "oneOf": [{ "$ref": "#/$defs/window" }, { "type": "null" }] },
+    "window": {
+      "type": "object",
+      "required": ["usedPercent"],
+      "properties": {
+        "usedPercent": { "type": "number" },
+        "windowMinutes": { "type": ["integer", "null"], "minimum": 1 },
+        "resetsAt": { "type": ["string", "null"], "format": "date-time" },
+        "resetDescription": { "type": ["string", "null"], "maxLength": 256 },
+        "nextRegenPercent": { "type": ["number", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "detailSection": {
+      "type": "object",
+      "required": ["rows"],
+      "properties": {
+        "title": { "type": ["string", "null"], "maxLength": 256 },
+        "rows": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": ["label", "value"],
+            "properties": {
+              "label": { "type": "string", "maxLength": 256 },
+              "value": { "type": "string", "maxLength": 256 },
+              "secondaryValue": { "type": ["string", "null"], "maxLength": 256 }
+            },
+            "additionalProperties": false
+          }
+        },
+        "chart": {
+          "type": ["object", "null"],
+          "properties": {
+            "kind": { "type": "string", "enum": ["bars", "line"] },
+            "title": { "type": ["string", "null"], "maxLength": 256 },
+            "unit": { "type": ["string", "null"], "maxLength": 256 },
+            "points": {
+              "type": "array",
+              "maxItems": 366,
+              "items": {
+                "type": "object",
+                "required": ["label", "value"],
+                "properties": {
+                  "label": { "type": "string", "maxLength": 256 },
+                  "value": { "type": "number" }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["kind", "points"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": true
+}

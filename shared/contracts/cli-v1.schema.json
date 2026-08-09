@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://tokencue.dev/contracts/cli-v1.schema.json",
+  "type": "object",
+  "required": ["schemaVersion", "command", "ok", "data", "errors"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "command": { "enum": ["usage", "cost", "diagnose", "sessions", "serve", "config", "hooks", "guard", "plugins"] },
+    "ok": { "type": "boolean" },
+    "data": {},
+    "errors": { "type": "array", "items": { "type": "object", "required": ["code", "message"], "properties": { "providerId": { "type": ["string", "null"] }, "code": { "type": "string" }, "message": { "type": "string" }, "retryable": { "type": "boolean" } }, "additionalProperties": false } },
+    "redactions": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

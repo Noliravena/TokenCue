@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "providerId": "codex",
+  "fetchedAt": "2026-08-08T08:00:00Z",
+  "lastSuccessfulAt": "2026-08-08T08:00:00Z",
+  "state": "fresh",
+  "error": null,
+  "identity": { "accountId": "acct_redacted", "displayName": "Demo account", "plan": "Pro" },
+  "windows": [
+    { "id": "session", "label": "5-hour limit", "usedPercent": 46, "resetsAt": "2026-08-08T10:15:00Z", "pacePercent": 52 },
+    { "id": "weekly", "label": "Weekly limit", "usedPercent": 72, "resetsAt": "2026-08-12T00:00:00Z", "pacePercent": 64 }
+  ],
+  "accounts": [],
+  "balance": { "amount": 18.4, "currency": "USD" },
+  "cost": { "period": "2026-08", "groups": [{ "amount": 23.7, "currency": "USD" }] },
+  "status": { "level": "operational", "message": null, "url": "https://status.openai.com" },
+  "diagnostics": { "credential": "[REDACTED]" }
+}
