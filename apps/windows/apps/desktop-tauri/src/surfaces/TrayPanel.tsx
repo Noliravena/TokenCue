@@ -1,23 +1,88 @@
-import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   BootstrapState,
+  ProviderChartData,
   ProviderUsageSnapshot,
   RateWindowSnapshot,
   UsageSpendSummary,
 } from "../types/bridge";
-import { beginFlyoutGesture, getUsageSpendSummary, updateSettings } from "../lib/tauri";
+import {
+  beginFlyoutGesture,
+  getAppInfo,
+  getProviderChartData,
+  getUsageSpendSummary,
+  updateSettings,
+} from "../lib/tauri";
+import {
+  REFRESH_CADENCE_OPTIONS,
+  refreshCadencePatch,
+  refreshCadenceValue,
+} from "./settings/refreshCadence";
 import { useTrayPanelController } from "../hooks/useTrayPanelController";
 import { useFormattedResetTime } from "../hooks/useFormattedResetTime";
 import { formatRelativeUpdated } from "../lib/relativeTime";
+import { formatChartDay, formatEventTime } from "../lib/eventTime";
+import { providerSupportsChartData } from "../lib/providerCharts";
+import { languageTag } from "../i18n/languageTag";
 import { ProviderIcon } from "../components/providers/ProviderIcon";
 import { getProviderIcon } from "../components/providers/providerIcons";
 import { Toggle } from "../components/FormControls";
 import type { LocaleKey } from "../i18n/keys";
-import tokencueIcon from "../assets/tokencue-icon.png";
+import { BrandMark } from "../components/BrandMark";
 
 type Translate = (key: LocaleKey) => string;
 type TrayTabId = "quota" | "spend" | "history" | "settings";
+
+const HISTORY_RANGES = [7, 14, 30] as const;
+type HistoryRange = (typeof HISTORY_RANGES)[number];
+
+/** The local JSONL cost scanners price everything in USD. */
+const LOCAL_SCANNER_CURRENCY = "USD";
+
+/** Brand tiles that fit the 380px footer without wrapping. */
+const SWITCHER_LIMIT = 8;
+
+/** DOM id linking a footer switcher tile to its quota card. */
+function quotaCardId(providerId: string) {
+  return `tokencue-quota-${providerId}`;
+}
+
+/** Chart viewBox the History sparkline is drawn into. */
+const SPARK_WIDTH = 300;
+const SPARK_HEIGHT = 78;
+
+/**
+ * Turn a value series into the stroked line plus its closed fill, scaled so
+ * the largest point sits just under the top edge and a flat series still
+ * reads as a baseline rather than collapsing to nothing.
+ */
+function buildAreaPath(values: number[]): { line: string; area: string } {
+  if (values.length < 2) return { line: "", area: "" };
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const span = max - min;
+  const top = 6;
+  const bottom = SPARK_HEIGHT - 8;
+  const points = values.map((value, index) => {
+    const x = (index / (values.length - 1)) * SPARK_WIDTH;
+    const ratio = span > 0 ? (value - min) / span : 0.5;
+    const y = bottom - ratio * (bottom - top);
+    return `${x.toFixed(1)} ${y.toFixed(1)}`;
+  });
+  const line = `M${points.join(" L")}`;
+  return {
+    line,
+    area: `${line} L${SPARK_WIDTH} ${SPARK_HEIGHT} L0 ${SPARK_HEIGHT} Z`,
+  };
+}
 
 function levelFor(
   snapshot: RateWindowSnapshot,
@@ -46,10 +111,14 @@ function compactEta(seconds: number) {
   return `${Math.round(hours / 24)}d`;
 }
 
-function formatMoney(value: number | null | undefined, currency = "USD") {
+function formatMoney(
+  value: number | null | undefined,
+  currency = "USD",
+  locale?: string,
+) {
   if (value == null || !Number.isFinite(value)) return "—";
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat(locale, {
       style: "currency",
       currency: currency || "USD",
       maximumFractionDigits: 2,
@@ -112,6 +181,68 @@ function TabIcon({ id }: { id: TrayTabId }) {
   );
 }
 
+type LinkTone = "providers" | "menuBar" | "floatBar" | "spend" | "about";
+
+/**
+ * Tinted tile glyphs for the tray Settings shortcut rows. The tile background
+ * and stroke come from `[data-tone]` in CSS so both themes get their own
+ * values instead of one hard-coded light-mode pastel.
+ */
+function LinkIcon({ tone }: { tone: LinkTone }) {
+  const common = {
+    width: 16,
+    height: 16,
+    viewBox: "0 0 16 16",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.4,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+    "aria-hidden": true,
+  };
+  if (tone === "providers") {
+    return (
+      <svg {...common}>
+        <circle cx="4" cy="4" r="1.5" />
+        <circle cx="12" cy="4" r="1.5" />
+        <circle cx="8" cy="12" r="1.5" />
+        <path d="M5.3 4.8 7.2 10M10.7 4.8 8.8 10M5.5 4h5" />
+      </svg>
+    );
+  }
+  if (tone === "menuBar") {
+    return (
+      <svg {...common}>
+        <path d="M1.5 8c1.6-3 4-4.5 6.5-4.5S13 5 14.5 8c-1.5 3-4 4.5-6.5 4.5S3.1 11 1.5 8Z" />
+        <circle cx="8" cy="8" r="2" />
+      </svg>
+    );
+  }
+  if (tone === "floatBar") {
+    return (
+      <svg {...common}>
+        <rect x="2" y="6" width="12" height="4" rx="2" />
+        <path d="M5 6V4M11 10v2" />
+      </svg>
+    );
+  }
+  if (tone === "spend") {
+    return (
+      <svg {...common}>
+        <path d="M2 12.5V4.5h12v8" />
+        <path d="M4.5 10V8M7.5 10V6.5M10.5 10V7.2M13 10V5.5" />
+      </svg>
+    );
+  }
+  return (
+    <svg {...common}>
+      <circle cx="8" cy="8" r="6.25" />
+      <path d="M8 7v4" />
+      <circle cx="8" cy="5" r="0.6" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
 function QuotaCard({
   provider,
   settings,
@@ -148,7 +279,7 @@ function QuotaCard({
 
   if (provider.error) {
     return (
-      <article className={className}>
+      <article className={className} id={quotaCardId(provider.providerId)}>
         <div className="tokencue-tray__card-head">
           <span
             className="tokencue-tray__brand-icon"
@@ -171,7 +302,7 @@ function QuotaCard({
   }
 
   return (
-    <article className={className}>
+    <article className={className} id={quotaCardId(provider.providerId)}>
       <div className="tokencue-tray__card-head">
         <span className="tokencue-tray__brand-icon" style={{ background: brand }}>
           <ProviderIcon providerId={provider.providerId} size={19} />
@@ -225,9 +356,11 @@ function QuotaCard({
 
 function SpendTab({
   t,
+  locale,
   openSettings,
 }: {
   t: Translate;
+  locale: string;
   openSettings: () => void;
 }) {
   const [summary, setSummary] = useState<UsageSpendSummary | null>(null);
@@ -252,41 +385,45 @@ function SpendTab({
   }, []);
 
   const rows = summary?.rows ?? [];
-  const totals = useMemo(() => {
-    let today = 0;
-    let thirty = 0;
-    let hasToday = false;
-    let hasThirty = false;
-    let currency = "USD";
+  const daily = summary?.daily ?? [];
+  // Providers bill in their own currencies and TokenCue never applies an
+  // exchange rate, so the 30-day figure lists each currency separately.
+  const thirtyTotal = useMemo(() => {
+    const totals = new Map<string, number>();
     for (const row of rows) {
-      currency = row.currency || currency;
-      // sevenDay is closest proxy for "today" aggregate across providers when
-      // daily totals are not available at this surface — prefer thirtyDay sum.
-      if (row.sevenDay != null) {
-        today += row.sevenDay / 7;
-        hasToday = true;
-      }
-      if (row.thirtyDay != null) {
-        thirty += row.thirtyDay;
-        hasThirty = true;
-      }
+      if (row.thirtyDay == null || !Number.isFinite(row.thirtyDay)) continue;
+      const code = row.currency || LOCAL_SCANNER_CURRENCY;
+      totals.set(code, (totals.get(code) ?? 0) + row.thirtyDay);
     }
     return {
-      today: hasToday ? today : null,
-      thirty: hasThirty ? thirty : null,
-      currency,
+      text:
+        totals.size === 0
+          ? "—"
+          : [...totals]
+              .map(([code, value]) => formatMoney(value, code, locale))
+              .join(" · "),
+      // Two currencies is two amounts; the display size has to give.
+      multi: totals.size > 1,
     };
-  }, [rows]);
+  }, [locale, rows]);
+
+  // `today` comes from the day-level local scanners (USD); providers that
+  // only report a billing-period total reach the table but not this figure.
+  const today = summary?.today ?? null;
 
   const bars = useMemo(() => {
-    const values = rows.slice(0, 14).map((row) => row.sevenDay ?? 0);
-    const max = Math.max(1, ...values);
-    return values.map((v) => ({
-      h: `${Math.max(8, Math.round((v / max) * 100))}%`,
-      hot: v / max > 0.6,
-      mid: v / max > 0.4,
-    }));
-  }, [rows]);
+    const max = Math.max(0, ...daily.map((point) => point.value));
+    return daily.map((point) => {
+      const ratio = max > 0 ? point.value / max : 0;
+      return {
+        date: point.date,
+        value: point.value,
+        h: `${Math.max(6, Math.round(ratio * 100))}%`,
+        hot: ratio > 0.6,
+        mid: ratio > 0.4,
+      };
+    });
+  }, [daily]);
 
   if (loading) {
     return (
@@ -314,31 +451,42 @@ function SpendTab({
           <span>
             <span className="tokencue-tray__eyebrow">{t("TrayTodayLabel")}</span>
             <span className="tokencue-tray__display-num">
-              {formatMoney(totals.today, totals.currency)}
+              {formatMoney(today, LOCAL_SCANNER_CURRENCY, locale)}
             </span>
           </span>
           <span className="tokencue-tray__spend-hero-side">
             <span className="tokencue-tray__eyebrow">{t("TrayLast30DaysLabel")}</span>
-            <span className="tokencue-tray__display-num tokencue-tray__display-num--sm">
-              {formatMoney(totals.thirty, totals.currency)}
+            <span
+              className={`tokencue-tray__display-num tokencue-tray__display-num--sm${
+                thirtyTotal.multi ? " tokencue-tray__display-num--multi" : ""
+              }`}
+            >
+              {thirtyTotal.text}
             </span>
           </span>
         </div>
         {bars.length > 0 ? (
-          <div className="tokencue-tray__bars" aria-hidden>
-            {bars.map((bar, index) => (
-              <span
-                key={index}
-                className={[
-                  "tokencue-tray__bar",
-                  bar.hot ? "is-hot" : bar.mid ? "is-mid" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                style={{ height: bar.h }}
-              />
-            ))}
-          </div>
+          <>
+            <div className="tokencue-tray__bars">
+              {bars.map((bar) => (
+                <span
+                  key={bar.date}
+                  className={[
+                    "tokencue-tray__bar",
+                    bar.hot ? "is-hot" : bar.mid ? "is-mid" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  style={{ height: bar.h }}
+                  title={`${formatChartDay(bar.date, locale)} · ${formatMoney(bar.value, LOCAL_SCANNER_CURRENCY, locale)}`}
+                />
+              ))}
+            </div>
+            <div className="tokencue-tray__axis tokencue-tray__mono">
+              <span>{t("TraySpendAxisStart").replace("{}", String(bars.length))}</span>
+              <span>{t("TrayTodayLabel")}</span>
+            </div>
+          </>
         ) : null}
       </article>
 
@@ -352,10 +500,10 @@ function SpendTab({
               </span>
               <span className="tokencue-tray__list-name">{row.displayName}</span>
               <span className="tokencue-tray__list-meta tokencue-tray__mono">
-                7d {formatMoney(row.sevenDay, row.currency)}
+                7d {formatMoney(row.sevenDay, row.currency, locale)}
               </span>
               <span className="tokencue-tray__list-value">
-                {formatMoney(row.thirtyDay, row.currency)}
+                {formatMoney(row.thirtyDay, row.currency, locale)}
               </span>
             </div>
           );
@@ -370,20 +518,67 @@ function HistoryTab({
   providers,
   settings,
   t,
+  locale,
 }: {
   providers: ProviderUsageSnapshot[];
   settings: BootstrapState["settings"];
   t: Translate;
+  locale: string;
 }) {
-  const lead = providers[0] ?? null;
+  // Only a few providers ship a real per-day series; the rest would need an
+  // invented curve, so the chart card simply does not appear for them.
+  const chartable = useMemo(
+    () => providers.filter((provider) => providerSupportsChartData(provider.providerId)),
+    [providers],
+  );
+  const [chartProviderId, setChartProviderId] = useState<string | null>(null);
+  const [range, setRange] = useState<HistoryRange>(7);
+  const [chart, setChart] = useState<ProviderChartData | null>(null);
+
+  const activeProvider =
+    chartable.find((provider) => provider.providerId === chartProviderId) ??
+    chartable[0] ??
+    null;
+  const activeId = activeProvider?.providerId ?? null;
+
+  useEffect(() => {
+    if (!activeId) {
+      setChart(null);
+      return;
+    }
+    let cancelled = false;
+    void getProviderChartData(activeId)
+      .then((next) => {
+        if (!cancelled) setChart(next);
+      })
+      .catch(() => {
+        if (!cancelled) setChart(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeId]);
+
   const events = useMemo(() => {
-    const rows: Array<{ title: string; detail: string; tone: string }> = [];
+    const rows: Array<{
+      title: string;
+      detail: string;
+      tone: string;
+      at: number;
+      time: string;
+    }> = [];
     for (const provider of providers) {
+      const at = Date.parse(provider.updatedAt);
+      // The backend keeps no event log, so an observation is timestamped with
+      // the refresh that saw it.
+      const time = formatEventTime(provider.updatedAt, Date.now(), locale);
       if (provider.error) {
         rows.push({
           title: provider.displayName,
           detail: provider.error,
           tone: "critical",
+          at: Number.isFinite(at) ? at : 0,
+          time,
         });
         continue;
       }
@@ -397,6 +592,8 @@ function HistoryTab({
           title: provider.displayName,
           detail: `${Math.round(provider.primary.usedPercent)}%`,
           tone: level,
+          at: Number.isFinite(at) ? at : 0,
+          time,
         });
       }
       if (provider.pace && !provider.pace.willLastToReset) {
@@ -409,48 +606,81 @@ function HistoryTab({
               : compactEta(provider.pace.etaSeconds),
           ),
           tone: "warning",
+          at: Number.isFinite(at) ? at : 0,
+          time,
         });
       }
     }
-    return rows.slice(0, 6);
-  }, [providers, settings, t]);
+    return rows.sort((left, right) => right.at - left.at).slice(0, 6);
+  }, [locale, providers, settings, t]);
 
-  const path = useMemo(() => {
-    if (!lead) return "";
-    // Simple sparkline from secondary/primary usage heuristic points.
-    const base = Math.max(4, Math.min(96, lead.primary.usedPercent));
-    const points = [0.2, 0.35, 0.4, 0.55, 0.62, 0.7, 0.78, 0.9, 1].map(
-      (t, i) => {
-        const x = (i / 8) * 300;
-        const y = 70 - base * t * 0.65;
-        return `${x.toFixed(1)} ${y.toFixed(1)}`;
-      },
-    );
-    return `M${points.join(" L")}`;
-  }, [lead]);
+  const series = useMemo(() => {
+    const source =
+      chart && chart.costHistory.length > 0
+        ? chart.costHistory
+        : (chart?.creditsHistory ?? []);
+    return source.slice(-range);
+  }, [chart, range]);
+
+  const paths = useMemo(() => buildAreaPath(series.map((point) => point.value)), [series]);
 
   return (
     <div className="tokencue-tray__body">
-      {lead ? (
+      {activeProvider && series.length > 1 ? (
         <article className="tokencue-tray__card tokencue-tray__card--stack">
           <div className="tokencue-tray__history-head">
             <span
               className="tokencue-tray__brand-icon tokencue-tray__brand-icon--sm"
-              style={{ background: getProviderIcon(lead.providerId).brandColor }}
+              style={{ background: getProviderIcon(activeProvider.providerId).brandColor }}
             >
-              <ProviderIcon providerId={lead.providerId} size={13} />
+              <ProviderIcon providerId={activeProvider.providerId} size={13} />
             </span>
-            <strong>{lead.displayName}</strong>
-            <span className="tokencue-tray__chip">7d</span>
+            {chartable.length > 1 ? (
+              <select
+                className="tokencue-tray__chip tokencue-tray__chip--select"
+                aria-label={t("TrayHistoryProviderLabel")}
+                value={activeProvider.providerId}
+                onChange={(event) => setChartProviderId(event.currentTarget.value)}
+              >
+                {chartable.map((provider) => (
+                  <option key={provider.providerId} value={provider.providerId}>
+                    {provider.displayName}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <strong>{activeProvider.displayName}</strong>
+            )}
+            <select
+              className="tokencue-tray__chip tokencue-tray__chip--select"
+              aria-label={t("TrayHistoryRangeLabel")}
+              value={range}
+              onChange={(event) =>
+                setRange(Number(event.currentTarget.value) as HistoryRange)
+              }
+            >
+              {HISTORY_RANGES.map((days) => (
+                <option key={days} value={days}>
+                  {t("TrayHistoryRangeDays").replace("{}", String(days))}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="tokencue-tray__spark">
             <svg viewBox="0 0 300 78" preserveAspectRatio="none" aria-hidden>
-              <path d={`${path} L300 78 L0 78 Z`} className="tokencue-tray__spark-fill" />
-              <path d={path} className="tokencue-tray__spark-line" />
+              <path d={paths.area} className="tokencue-tray__spark-fill" />
+              <path d={paths.line} className="tokencue-tray__spark-line" />
             </svg>
           </div>
           <div className="tokencue-tray__spark-legend tokencue-tray__mono">
-            <span>{Math.round(lead.primary.usedPercent)}%</span>
+            <span>{formatChartDay(series[0].date, locale)}</span>
+            <span>
+              {t("TrayHistoryCumulative").replace(
+                "{}",
+                String(Math.round(activeProvider.primary.usedPercent)),
+              )}
+            </span>
+            <span>{t("TrayTodayLabel")}</span>
           </div>
         </article>
       ) : null}
@@ -458,7 +688,7 @@ function HistoryTab({
       <p className="tokencue-tray__eyebrow">{t("TrayRecentEvents")}</p>
       <article className="tokencue-tray__card tokencue-tray__card--list">
         {events.length === 0 ? (
-          <p className="tokencue-tray__hint" style={{ padding: "12px 15px" }}>
+          <p className="tokencue-tray__hint tokencue-tray__hint--inset">
             {t("UsageSpendEmpty")}
           </p>
         ) : (
@@ -468,6 +698,9 @@ function HistoryTab({
               <span className="tokencue-tray__event-copy">
                 <span className="tokencue-tray__event-title">{event.title}</span>
                 <span className="tokencue-tray__event-detail">{event.detail}</span>
+              </span>
+              <span className="tokencue-tray__event-time tokencue-tray__mono">
+                {event.time}
               </span>
             </div>
           ))
@@ -482,12 +715,82 @@ function SettingsTab({
   t,
   openSettings,
   openUsageSpend,
+  openMenuBarSettings,
+  openFloatBarSettings,
+  openAbout,
 }: {
   settings: BootstrapState["settings"];
   t: Translate;
   openSettings: () => void;
   openUsageSpend: () => void;
+  openMenuBarSettings: () => void;
+  openFloatBarSettings: () => void;
+  openAbout: () => void;
 }) {
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void getAppInfo()
+      .then((info) => {
+        if (!cancelled) setAppVersion(info.version);
+      })
+      .catch(() => {
+        if (!cancelled) setAppVersion(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const displayModeLabel = t(
+    settings.menuBarDisplayMode === "compact"
+      ? "DisplayModeCompact"
+      : settings.menuBarDisplayMode === "minimal"
+        ? "DisplayModeMinimal"
+        : "DisplayModeDetailed",
+  );
+
+  const links: Array<{
+    tone: LinkTone;
+    label: string;
+    value: string;
+    onClick: () => void;
+  }> = [
+    {
+      tone: "providers",
+      label: t("TabProviders"),
+      value: t("TrayProvidersEnabled").replace(
+        "{}",
+        String(settings.enabledProviders.length),
+      ),
+      onClick: openSettings,
+    },
+    {
+      tone: "menuBar",
+      label: t("TabMenuBar"),
+      value: displayModeLabel,
+      onClick: openMenuBarSettings,
+    },
+    {
+      tone: "floatBar",
+      label: t("FloatBarSectionTitle"),
+      value: settings.floatBarEnabled ? t("ProviderEnabled") : t("ProviderDisabled"),
+      onClick: openFloatBarSettings,
+    },
+    {
+      tone: "spend",
+      label: t("UsageSpendTitle"),
+      value: "",
+      onClick: openUsageSpend,
+    },
+    {
+      tone: "about",
+      label: t("TabAbout"),
+      value: appVersion ?? "",
+      onClick: openAbout,
+    },
+  ];
+
   return (
     <div className="tokencue-tray__body">
       <article className="tokencue-tray__card tokencue-tray__card--list">
@@ -518,38 +821,43 @@ function SettingsTab({
             <span className="tokencue-tray__setting-title">{t("RefreshIntervalLabel")}</span>
             <span className="tokencue-tray__setting-help">{t("RefreshIntervalHelper")}</span>
           </span>
-          <span className="tokencue-tray__chip">
-            {settings.refreshIntervalSecs <= 0
-              ? t("RefreshIntervalManual")
-              : settings.refreshIntervalSecs < 60
-                ? `${settings.refreshIntervalSecs}s`
-                : `${Math.round(settings.refreshIntervalSecs / 60)}m`}
-          </span>
+          <select
+            className="tokencue-tray__chip tokencue-tray__chip--select"
+            aria-label={t("RefreshIntervalLabel")}
+            value={refreshCadenceValue(settings)}
+            onChange={(event) =>
+              void updateSettings(refreshCadencePatch(event.currentTarget.value))
+            }
+          >
+            {REFRESH_CADENCE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {t(option.labelKey)}
+              </option>
+            ))}
+          </select>
         </div>
       </article>
 
       <article className="tokencue-tray__card tokencue-tray__card--list">
-        <button type="button" className="tokencue-tray__link-row" onClick={openSettings}>
-          <span className="tokencue-tray__link-icon" style={{ background: "#dfe7dc" }}>
-            ⧉
-          </span>
-          <span className="tokencue-tray__list-name">{t("TabProviders")}</span>
-          <span className="tokencue-tray__chevron">›</span>
-        </button>
-        <button type="button" className="tokencue-tray__link-row" onClick={openUsageSpend}>
-          <span className="tokencue-tray__link-icon" style={{ background: "#f3e1d2" }}>
-            $
-          </span>
-          <span className="tokencue-tray__list-name">{t("UsageSpendTitle")}</span>
-          <span className="tokencue-tray__chevron">›</span>
-        </button>
-        <button type="button" className="tokencue-tray__link-row" onClick={openSettings}>
-          <span className="tokencue-tray__link-icon" style={{ background: "#dee6f0" }}>
-            i
-          </span>
-          <span className="tokencue-tray__list-name">{t("TabAbout")}</span>
-          <span className="tokencue-tray__chevron">›</span>
-        </button>
+        {links.map((link) => (
+          <button
+            key={link.tone}
+            type="button"
+            className="tokencue-tray__link-row"
+            onClick={link.onClick}
+          >
+            <span className="tokencue-tray__link-icon" data-tone={link.tone}>
+              <LinkIcon tone={link.tone} />
+            </span>
+            <span className="tokencue-tray__list-name">{link.label}</span>
+            {link.value ? (
+              <span className="tokencue-tray__link-value">{link.value}</span>
+            ) : null}
+            <span className="tokencue-tray__chevron" aria-hidden>
+              ›
+            </span>
+          </button>
+        ))}
       </article>
 
       <button type="button" className="tokencue-tray__cta" onClick={openSettings}>
@@ -562,6 +870,7 @@ function SettingsTab({
 export default function TrayPanel({ state }: { state: BootstrapState }) {
   const {
     t,
+    language,
     settings,
     isRefreshing,
     refresh,
@@ -570,11 +879,31 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
     layoutReady,
     openSettings,
     openUsageSpend,
+    openMenuBarSettings,
+    openFloatBarSettings,
+    openAbout,
+    openPopOut,
     quitApp,
     revealClassName,
   } = useTrayPanelController(state);
 
+  const locale = languageTag(language);
   const [tab, setTab] = useState<TrayTabId>("quota");
+  // Footer switcher: jump back to the quota list and bring that provider's
+  // card into view once the tab has rendered.
+  const [pendingFocus, setPendingFocus] = useState<string | null>(null);
+  const focusProvider = useCallback((providerId: string) => {
+    setTab("quota");
+    setPendingFocus(providerId);
+  }, []);
+  useEffect(() => {
+    if (!pendingFocus) return;
+    const card = document.getElementById(quotaCardId(pendingFocus));
+    // Guarded: the tab switch is the point, scrolling is the nicety, and
+    // `scrollIntoView` is absent in some embedded webviews.
+    card?.scrollIntoView?.({ block: "nearest" });
+    setPendingFocus(null);
+  }, [pendingFocus]);
 
   const latestTimestamp = sorted.reduce((latest, provider) => {
     const parsed = Date.parse(provider.updatedAt);
@@ -595,7 +924,7 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
   if (sorted.length === 0 && tab === "quota") {
     body = (
       <div className="tokencue-tray__empty">
-        <img src={tokencueIcon} alt="" className="tokencue-tray__empty-icon" />
+        <BrandMark className="tokencue-tray__empty-icon" size={60} />
         <h2>{t("TrayEmptyTitle")}</h2>
         <p>{t("NoProvidersConfigured")}</p>
         <button type="button" className="tokencue-tray__cta" onClick={openSettings}>
@@ -618,9 +947,11 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
       </div>
     );
   } else if (tab === "spend") {
-    body = <SpendTab t={t} openSettings={openSettings} />;
+    body = <SpendTab t={t} locale={locale} openSettings={openSettings} />;
   } else if (tab === "history") {
-    body = <HistoryTab providers={sorted} settings={settings} t={t} />;
+    body = (
+      <HistoryTab providers={sorted} settings={settings} t={t} locale={locale} />
+    );
   } else {
     body = (
       <SettingsTab
@@ -628,6 +959,9 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
         t={t}
         openSettings={openSettings}
         openUsageSpend={openUsageSpend}
+        openMenuBarSettings={openMenuBarSettings}
+        openFloatBarSettings={openFloatBarSettings}
+        openAbout={openAbout}
       />
     );
   }
@@ -644,7 +978,7 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
             <span />
           </div>
           <div className="tokencue-tray__brand">
-            <img src={tokencueIcon} alt="" className="tokencue-tray__logo" />
+            <BrandMark className="tokencue-tray__logo" size={22} />
             <strong>TokenCue</strong>
           </div>
         </header>
@@ -670,16 +1004,74 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
         <footer className="tokencue-tray__footer">
           <button
             type="button"
-            className={isRefreshing ? "is-refreshing" : ""}
+            className="tokencue-tray__footer-btn"
+            aria-label={t("TrayPopOutDashboard")}
+            title={t("TrayPopOutDashboard")}
+            onClick={openPopOut}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M13 8H5.5M8.5 4.5 5 8l3.5 3.5M13 3v10" />
+            </svg>
+          </button>
+
+          {settings.switcherShowsIcons && sorted.length > 0 ? (
+            <div className="tokencue-tray__switcher">
+              {sorted.slice(0, SWITCHER_LIMIT).map((provider) => (
+                <button
+                  key={provider.providerId}
+                  type="button"
+                  className="tokencue-tray__switcher-btn"
+                  style={{ background: getProviderIcon(provider.providerId).brandColor }}
+                  aria-label={provider.displayName}
+                  title={provider.displayName}
+                  onClick={() => focusProvider(provider.providerId)}
+                >
+                  <ProviderIcon providerId={provider.providerId} size={14} />
+                </button>
+              ))}
+            </div>
+          ) : (
+            <span className="tokencue-tray__updated">{updated}</span>
+          )}
+
+          <button
+            type="button"
+            className={`tokencue-tray__kbd${isRefreshing ? " is-refreshing" : ""}`}
             aria-label={t("ActionRefresh")}
+            title={t("ActionRefresh")}
             onClick={refresh}
           >
-            ⟳
+            Ctrl R
           </button>
-          <span className="tokencue-tray__updated">{updated}</span>
-          <span className="tokencue-tray__kbd">Ctrl R</span>
-          <button type="button" aria-label={t("MenuQuit")} onClick={quitApp}>
-            ⋮
+          <button
+            type="button"
+            className="tokencue-tray__footer-btn"
+            aria-label={t("MenuQuit")}
+            title={t("MenuQuit")}
+            onClick={quitApp}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              aria-hidden
+            >
+              <path d="M8 2.5v5.5" />
+              <path d="M11.9 4.4a5 5 0 1 1-7.8 0" />
+            </svg>
           </button>
         </footer>
       </section>

@@ -2,11 +2,21 @@
 
 use serde::Serialize;
 use tauri::State;
-use tokencue::cost_scanner::CostScanner;
+use tokencue::cost_scanner::{CostScanner, get_daily_cost_history};
 
 use super::ProviderUsageSnapshot;
 use crate::state::AppState;
+use std::collections::BTreeMap;
 use std::sync::Mutex;
+
+/// Days of per-day history returned alongside the aggregates. The warm tray
+/// "Spend" tab plots exactly this many bars.
+const DAILY_HISTORY_DAYS: u32 = 14;
+
+/// Providers with a real per-day local breakdown (JSONL transcript scanners).
+/// Everything else only reports a billing-period total, which cannot be
+/// spread across calendar days without inventing numbers.
+const DAILY_HISTORY_PROVIDERS: [&str; 2] = ["codex", "claude"];
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,10 +29,25 @@ pub struct UsageSpendRow {
     pub source: String,
 }
 
+/// One calendar day of merged local spend, oldest first.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageSpendDailyPoint {
+    /// Local calendar day as `YYYY-MM-DD`.
+    pub date: String,
+    pub value: f64,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UsageSpendSummary {
     pub rows: Vec<UsageSpendRow>,
+    /// Today's merged spend across the local scanners, or `None` when no
+    /// provider exposes day-level data.
+    pub today: Option<f64>,
+    /// Merged daily spend for the last `DAILY_HISTORY_DAYS` days, oldest
+    /// first. Empty when no provider exposes day-level data.
+    pub daily: Vec<UsageSpendDailyPoint>,
 }
 
 #[tauri::command]
@@ -88,5 +113,24 @@ fn build_usage_spend_summary(cached: &[ProviderUsageSnapshot]) -> UsageSpendSumm
         });
     }
 
-    UsageSpendSummary { rows }
+    let daily = build_daily_history();
+    // `get_daily_cost_history` buckets by the local calendar day and always
+    // seeds today, so the last point is today whenever any history exists.
+    let today = daily.last().map(|point| point.value);
+
+    UsageSpendSummary { rows, today, daily }
+}
+
+/// Merge the per-provider daily scanners into one series, oldest day first.
+fn build_daily_history() -> Vec<UsageSpendDailyPoint> {
+    let mut merged: BTreeMap<String, f64> = BTreeMap::new();
+    for provider in DAILY_HISTORY_PROVIDERS {
+        for (date, cost) in get_daily_cost_history(provider, DAILY_HISTORY_DAYS) {
+            *merged.entry(date).or_insert(0.0) += cost;
+        }
+    }
+    merged
+        .into_iter()
+        .map(|(date, value)| UsageSpendDailyPoint { date, value })
+        .collect()
 }

@@ -23,6 +23,8 @@ const tauriMocks = vi.hoisted(() => ({
   getLocaleStrings: vi.fn(),
   setUiLanguage: vi.fn(),
   getUsageSpendSummary: vi.fn(),
+  getProviderChartData: vi.fn(),
+  getAppInfo: vi.fn(),
 }));
 
 const eventMocks = vi.hoisted(() => ({
@@ -236,7 +238,24 @@ describe("TokenCue handoff tray panel", () => {
     });
     tauriMocks.getSettingsSnapshot.mockResolvedValue(settings());
     tauriMocks.updateSettings.mockResolvedValue(settings());
-    tauriMocks.getUsageSpendSummary.mockResolvedValue({ rows: [] });
+    tauriMocks.getUsageSpendSummary.mockResolvedValue({
+      rows: [],
+      today: null,
+      daily: [],
+    });
+    tauriMocks.getProviderChartData.mockResolvedValue({
+      providerId: "codex",
+      costHistory: [],
+      creditsHistory: [],
+      usageBreakdown: [],
+      localUsage: null,
+    });
+    tauriMocks.getAppInfo.mockResolvedValue({
+      name: "TokenCue",
+      version: "1.4.2",
+      buildNumber: "1042",
+      tagline: "Local quota tracking",
+    });
     tauriMocks.getLocaleStrings.mockResolvedValue(
       buildBundle({
         ActionRefresh: "Refresh",
@@ -267,6 +286,22 @@ describe("TokenCue handoff tray panel", () => {
         PanelLeftSuffix: "left",
         UsageSpendLoading: "Loading…",
         UsageSpendEmpty: "No spend data yet.",
+        TraySpendAxisStart: "{} days ago",
+        TrayHistoryRangeDays: "{} days",
+        TrayHistoryRangeLabel: "Time range",
+        TrayHistoryProviderLabel: "History provider",
+        TrayHistoryCumulative: "{}% used",
+        TrayProvidersEnabled: "{} enabled",
+        TabProviders: "Providers",
+        TabMenuBar: "Menu bar",
+        TabAbout: "About",
+        FloatBarSectionTitle: "Floating bar",
+        ProviderEnabled: "Enabled",
+        ProviderDisabled: "Disabled",
+        DisplayModeDetailed: "Detailed",
+        RefreshIntervalLabel: "Refresh interval",
+        RefreshIntervalHelper: "How often providers refresh.",
+        TrayPopOutDashboard: "Pop out dashboard",
       }),
     );
     eventMocks.listen.mockImplementation(
@@ -488,6 +523,64 @@ describe("TokenCue handoff tray panel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Quit TokenCue" }));
     expect(tauriMocks.quitApp).toHaveBeenCalledTimes(1);
+  });
+
+  it("plots the daily spend series and totals each currency separately", async () => {
+    tauriMocks.getUsageSpendSummary.mockResolvedValue({
+      rows: [
+        { providerId: "codex", displayName: "Codex", sevenDay: 8.4, thirtyDay: 31.2, currency: "USD", source: "local logs" },
+        { providerId: "qwen", displayName: "Qwen", sevenDay: 36.5, thirtyDay: 128.2, currency: "CNY", source: "period" },
+      ],
+      today: 2.14,
+      daily: [
+        { date: "2026-08-07", value: 1 },
+        { date: "2026-08-08", value: 4 },
+        { date: "2026-08-09", value: 2 },
+      ],
+    });
+    const { container } = renderTrayPanel([provider("codex", "Codex", 40)]);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Spend/i }));
+
+    await waitFor(() => {
+      expect(container.querySelectorAll(".tokencue-tray__bar")).toHaveLength(3);
+    });
+    // Tallest bar is full height; the rest scale against it.
+    expect(
+      Array.from(container.querySelectorAll(".tokencue-tray__bar")).map(
+        (bar) => (bar as HTMLElement).style.height,
+      ),
+    ).toEqual(["25%", "100%", "50%"]);
+    expect(screen.getByText("3 days ago")).toBeInTheDocument();
+    // USD and CNY are listed side by side rather than summed together.
+    const thirtyDay = container.querySelector(
+      ".tokencue-tray__display-num--sm",
+    );
+    expect(thirtyDay?.textContent).toContain("31.20");
+    expect(thirtyDay?.textContent).toContain("128.20");
+  });
+
+  it("keeps the shortcut chip wired to refresh", async () => {
+    renderTrayPanel([provider("codex", "Codex", 40)]);
+    const refresh = await screen.findByRole("button", { name: "Refresh" });
+    expect(refresh).toHaveTextContent("Ctrl R");
+  });
+
+  it("jumps to a provider card from the footer switcher", async () => {
+    const snapshots = [provider("codex", "Codex", 40), provider("claude", "Claude", 55)];
+    const { container } = renderTrayPanel(snapshots, {
+      enabledProviders: ["codex", "claude"],
+      switcherShowsIcons: true,
+    });
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Settings/i }));
+    expect(await screen.findByText("Open full settings")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Claude" }));
+
+    await waitFor(() => {
+      expect(container.querySelector("#tokencue-quota-claude")).not.toBeNull();
+    });
   });
 
   it("opens Settings from the empty state", async () => {

@@ -1,23 +1,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocale } from "../../../hooks/useLocale";
 import { getUsageSpendSummary } from "../../../lib/tauri";
-import type { UsageSpendSummary } from "../../../types/bridge";
+import type { UsageSpendRow, UsageSpendSummary } from "../../../types/bridge";
 import type { TabProps } from "../settingsTabs";
+import { languageTag } from "../../../i18n/languageTag";
+import { ProviderIcon } from "../../../components/providers/ProviderIcon";
+import { getProviderIcon } from "../../../components/providers/providerIcons";
 
 const currencyFormatters = new Map<string, Intl.NumberFormat>();
 
-function formatUsd(value: number | null | undefined, currency: string): string {
+function formatMoney(
+  value: number | null | undefined,
+  currency: string,
+  locale?: string,
+): string {
   if (value == null || !Number.isFinite(value)) return "—";
   const code = currency || "USD";
+  const cacheKey = `${locale ?? ""}|${code}`;
   try {
-    let formatter = currencyFormatters.get(code);
+    let formatter = currencyFormatters.get(cacheKey);
     if (!formatter) {
-      formatter = new Intl.NumberFormat(undefined, {
+      formatter = new Intl.NumberFormat(locale, {
         style: "currency",
         currency: code,
         maximumFractionDigits: 2,
       });
-      currencyFormatters.set(code, formatter);
+      currencyFormatters.set(cacheKey, formatter);
     }
     return formatter.format(value);
   } catch {
@@ -25,8 +33,38 @@ function formatUsd(value: number | null | undefined, currency: string): string {
   }
 }
 
+/** The local JSONL cost scanners price everything in USD. */
+const LOCAL_SCANNER_CURRENCY = "USD";
+
+/**
+ * Total a spend column without converting between currencies — the caption
+ * promises native currencies with no implicit FX, so a mixed set renders as
+ * separate per-currency amounts rather than one meaningless sum.
+ */
+function sumByCurrency(
+  rows: UsageSpendRow[],
+  field: "sevenDay" | "thirtyDay",
+  locale: string,
+): string {
+  const totals = new Map<string, number>();
+  for (const row of rows) {
+    const value = row[field];
+    if (value == null || !Number.isFinite(value)) continue;
+    const code = row.currency || LOCAL_SCANNER_CURRENCY;
+    totals.set(code, (totals.get(code) ?? 0) + value);
+  }
+  if (totals.size === 0) return "—";
+  return [...totals]
+    .map(([code, value]) => formatMoney(value, code, locale))
+    .join(" · ");
+}
+
 /** Sanitized share-card PNG (no account emails) — upstream #2112. */
-function renderSharePng(summary: UsageSpendSummary, title: string): string {
+function renderSharePng(
+  summary: UsageSpendSummary,
+  title: string,
+  locale: string,
+): string {
   const rows = summary.rows ?? [];
   const pad = 24;
   const rowH = 28;
@@ -81,8 +119,8 @@ function renderSharePng(summary: UsageSpendSummary, title: string): string {
       const y = y0 + (idx + 1) * rowH;
       const cells = [
         row.displayName,
-        formatUsd(row.sevenDay, row.currency),
-        formatUsd(row.thirtyDay, row.currency),
+        formatMoney(row.sevenDay, row.currency, locale),
+        formatMoney(row.thirtyDay, row.currency, locale),
         row.currency || "USD",
         row.source,
       ];
@@ -118,7 +156,8 @@ function downloadDataUrl(dataUrl: string, filename: string) {
 }
 
 export default function UsageSpendTab(_props: TabProps) {
-  const { t } = useLocale();
+  const { t, language } = useLocale();
+  const locale = languageTag(language);
   const [summary, setSummary] = useState<UsageSpendSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -150,7 +189,7 @@ export default function UsageSpendTab(_props: TabProps) {
       return;
     }
     try {
-      const dataUrl = renderSharePng(summary, t("UsageSpendTitle"));
+      const dataUrl = renderSharePng(summary, t("UsageSpendTitle"), locale);
       if (!dataUrl) {
         setShareError(t("UsageSpendShareFailed"));
         return;
@@ -160,21 +199,15 @@ export default function UsageSpendTab(_props: TabProps) {
     } catch {
       setShareError(t("UsageSpendShareFailed"));
     }
-  }, [summary, t]);
+  }, [locale, summary, t]);
 
   const rows = summary?.rows ?? [];
-  const totals = rows.reduce(
-    (acc, row) => {
-      if (row.sevenDay != null) acc.seven += row.sevenDay;
-      if (row.thirtyDay != null) acc.thirty += row.thirtyDay;
-      if (row.currency) acc.currency = row.currency;
-      return acc;
-    },
-    { seven: 0, thirty: 0, currency: "USD" },
-  );
-  const todayEstimate = rows.some((r) => r.sevenDay != null) ? totals.seven / 7 : null;
-  const sevenTotal = rows.some((r) => r.sevenDay != null) ? totals.seven : null;
-  const thirtyTotal = rows.some((r) => r.thirtyDay != null) ? totals.thirty : null;
+  const sevenTotal = sumByCurrency(rows, "sevenDay", locale);
+  const thirtyTotal = sumByCurrency(rows, "thirtyDay", locale);
+  // Today comes straight from the day-level local scanners rather than an
+  // average of the 7-day window. Those scanners price in USD.
+  const todayTotal =
+    summary?.today == null ? "—" : formatMoney(summary.today, LOCAL_SCANNER_CURRENCY, locale);
 
   return (
     <section className="settings-section">
@@ -211,19 +244,19 @@ export default function UsageSpendTab(_props: TabProps) {
         <div className="usage-spend-hero__card">
           <div className="usage-spend-hero__label">{t("TrayTodayLabel")}</div>
           <div className="usage-spend-hero__value">
-            {formatUsd(todayEstimate, totals.currency)}
+            {todayTotal}
           </div>
         </div>
         <div className="usage-spend-hero__card">
           <div className="usage-spend-hero__label">{t("UsageSpendCol7d")}</div>
           <div className="usage-spend-hero__value">
-            {formatUsd(sevenTotal, totals.currency)}
+            {sevenTotal}
           </div>
         </div>
         <div className="usage-spend-hero__card">
           <div className="usage-spend-hero__label">{t("UsageSpendCol30d")}</div>
           <div className="usage-spend-hero__value">
-            {formatUsd(thirtyTotal, totals.currency)}
+            {thirtyTotal}
           </div>
         </div>
       </div>
@@ -245,9 +278,19 @@ export default function UsageSpendTab(_props: TabProps) {
           <tbody>
             {(summary?.rows ?? []).map((row) => (
               <tr key={row.providerId}>
-                <td>{row.displayName}</td>
-                <td>{formatUsd(row.sevenDay, row.currency)}</td>
-                <td>{formatUsd(row.thirtyDay, row.currency)}</td>
+                <td>
+                  <span className="usage-spend-table__provider">
+                    <span
+                      className="usage-spend-table__brand"
+                      style={{ background: getProviderIcon(row.providerId).brandColor }}
+                    >
+                      <ProviderIcon providerId={row.providerId} size={14} />
+                    </span>
+                    <span>{row.displayName}</span>
+                  </span>
+                </td>
+                <td>{formatMoney(row.sevenDay, row.currency, locale)}</td>
+                <td>{formatMoney(row.thirtyDay, row.currency, locale)}</td>
                 <td>{row.currency || "USD"}</td>
                 <td className="usage-spend-table__source">{row.source}</td>
               </tr>

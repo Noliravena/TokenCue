@@ -11,7 +11,7 @@ import type {
   ProviderCatalogEntry,
 } from "../types/bridge";
 import { ProviderIcon } from "../components/providers/ProviderIcon";
-import tokencueIcon from "../assets/tokencue-icon.png";
+import { BrandMark } from "../components/BrandMark";
 
 export const ONBOARDING_STORAGE_KEY = "tokencue.onboarding.completed.v1";
 
@@ -167,7 +167,7 @@ export default function Onboarding({ state, onComplete }: OnboardingProps) {
 
         {step === 0 ? (
           <div className="onboarding-page onboarding-welcome">
-            <img className="onboarding-hero-mark" src={tokencueIcon} alt="" />
+            <BrandMark className="onboarding-hero-mark" size={64} />
             <p className="onboarding-eyebrow">WINDOWS 11 · PRIVATE BY DEFAULT</p>
             <h1 id="onboarding-title">所有 AI 额度，一眼掌握</h1>
             <p className="onboarding-lead">

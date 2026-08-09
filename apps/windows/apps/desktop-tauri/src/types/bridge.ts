@@ -322,8 +322,22 @@ export interface UsageSpendRow {
   source: string;
 }
 
+/** One local calendar day of merged spend, oldest first. */
+export interface UsageSpendDailyPoint {
+  /** Local calendar day as `YYYY-MM-DD`. */
+  date: string;
+  value: number;
+}
+
 export interface UsageSpendSummary {
   rows: UsageSpendRow[];
+  /**
+   * Today's merged spend across the local day-level scanners, or null when no
+   * provider exposes day-level data.
+   */
+  today?: number | null;
+  /** Merged daily spend for the last 14 days, oldest first. */
+  daily?: UsageSpendDailyPoint[];
 }
 
 /** Codex local Workspaces snapshot (get_codex_workspaces_snapshot). */

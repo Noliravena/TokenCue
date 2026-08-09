@@ -88,11 +88,11 @@
   --provider-row-text-secondary: rgba(235, 235, 245, 0.5);
   --provider-row-text-disabled: rgba(235, 235, 245, 0.3);
   --provider-row-drop-outline: rgba(194, 103, 58, 0.5);
-  --provider-status-ok: #22c55e;
-  --provider-status-stale: #f59e0b;
-  --provider-status-error: #ff453a; /* macOS NSColor.systemRed */
+  --provider-status-ok: var(--tb-color-normal, #6e8f5a);
+  --provider-status-stale: var(--tb-color-warning, #c78f2a);
+  --provider-status-error: var(--tb-color-critical, #bb4a3d);
   --provider-status-disabled: rgba(235, 235, 245, 0.28);
-  --provider-status-loading: #60a5fa;
+  --provider-status-loading: var(--tb-color-accent, #c2673a);
   --provider-icon-ring: rgba(255, 255, 255, 0.06);
   --provider-icon-bg: rgba(255, 255, 255, 0.04);
 
@@ -3166,7 +3166,7 @@ body:has(.tray-panel-reveal) {
   height: 30px;
   margin: -6px -10px 0;
   padding: 0 4px 0 12px;
-  background: #1e1e1e;
+  background: var(--panel-bg, #1c1913);
   -webkit-app-region: drag;
   user-select: none;
   flex-shrink: 0;
@@ -4669,8 +4669,8 @@ html:has(.menu-surface--tray) {
   border-radius: 2px;
   background: linear-gradient(
     to right,
-    var(--accent, #0a84ff) 0%,
-    var(--accent, #0a84ff) var(--zoom-fill, 0%),
+    var(--accent, #c2673a) 0%,
+    var(--accent, #c2673a) var(--zoom-fill, 0%),
     rgba(255, 255, 255, 0.2) var(--zoom-fill, 0%)
   );
 }
@@ -4680,7 +4680,7 @@ html:has(.menu-surface--tray) {
   height: 12px;
   margin-top: -4px; /* centres the 12px thumb on the 4px track */
   border-radius: 50%;
-  background: var(--accent, #0a84ff);
+  background: var(--accent, #c2673a);
   box-shadow:
     0 0 0 1px rgba(255, 255, 255, 0.35),
     0 1px 2px rgba(0, 0, 0, 0.4);
@@ -4690,15 +4690,15 @@ html:has(.menu-surface--tray) {
 }
 .menu-surface__footer-zoom-slider:focus-visible::-webkit-slider-thumb {
   box-shadow:
-    0 0 0 2px var(--accent-muted, rgba(10, 132, 255, 0.25)),
+    0 0 0 2px var(--accent-muted, rgba(194, 103, 58, 0.25)),
     0 0 0 1px rgba(255, 255, 255, 0.35);
 }
 [data-theme="light"]
   .menu-surface__footer-zoom-slider::-webkit-slider-runnable-track {
   background: linear-gradient(
     to right,
-    var(--accent, #007aff) 0%,
-    var(--accent, #007aff) var(--zoom-fill, 0%),
+    var(--accent, #c2673a) 0%,
+    var(--accent, #c2673a) var(--zoom-fill, 0%),
     rgba(0, 0, 0, 0.15) var(--zoom-fill, 0%)
   );
 }
@@ -4845,7 +4845,7 @@ html:has(.menu-surface--tray) {
   bottom: 0;
   width: var(--weekly-pct, 0%);
   border-radius: 2px;
-  background: var(--weekly-color, var(--accent, #0a84ff));
+  background: var(--weekly-color, var(--accent, #c2673a));
 }
 /* Hide weekly bar when selected — matches macOS updateWeeklyIndicatorVisibility */
 .provider-grid__item--active .provider-grid__weekly-track {
@@ -4863,16 +4863,16 @@ html:has(.menu-surface--tray) {
   flex-shrink: 0;
 }
 .provider-grid__dot[data-status="ok"] {
-  background: #34c759;
+  background: var(--usage-bar-normal);
 }
 .provider-grid__dot[data-status="warning"] {
-  background: #ffd60a;
+  background: var(--usage-bar-high);
 }
 .provider-grid__dot[data-status="exhausted"] {
-  background: #ff9f0a;
+  background: var(--usage-bar-critical);
 }
 .provider-grid__dot[data-status="error"] {
-  background: #ff453a;
+  background: var(--usage-bar-exhausted);
 }
 .provider-grid__item--active .provider-grid__dot {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.3);
@@ -4932,16 +4932,16 @@ html:has(.menu-surface--tray) {
    chart palette covers) but the menu defaults to a green-when-healthy
    gradient based on usage threshold — green → yellow → orange → red. */
 :root {
-  --usage-bar-normal: #0a84ff;     /* macOS systemBlue — healthy */
-  --usage-bar-high: #ffd60a;       /* macOS systemYellow */
-  --usage-bar-critical: #ff9f0a;   /* macOS systemOrange */
-  --usage-bar-exhausted: #ff453a;  /* macOS systemRed    */
+  --usage-bar-normal: #8bb073;     /* warm sage — healthy   */
+  --usage-bar-high: #e0b055;       /* warm amber — watch it */
+  --usage-bar-critical: #d8894f;   /* warm ember            */
+  --usage-bar-exhausted: #d86958;  /* warm rust — out       */
 }
 [data-theme="light"] {
-  --usage-bar-normal: #007aff;
-  --usage-bar-high: #ffcc00;
-  --usage-bar-critical: #ff9500;
-  --usage-bar-exhausted: #ff3b30;
+  --usage-bar-normal: #6e8f5a;
+  --usage-bar-high: #c78f2a;
+  --usage-bar-critical: #bd7434;
+  --usage-bar-exhausted: #bb4a3d;
 }
 
 .menu-metric__pct,
@@ -4981,7 +4981,7 @@ html:has(.menu-surface--tray) {
   align-items: center;
   height: 32px;
   padding: 0 4px 0 12px;
-  background: #1e1e1e;
+  background: var(--panel-bg, #1c1913);
   -webkit-app-region: drag;
   user-select: none;
   flex-shrink: 0;

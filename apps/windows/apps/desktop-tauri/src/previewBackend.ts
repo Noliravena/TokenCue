@@ -325,18 +325,35 @@ const providers: ProviderUsageSnapshot[] = [
   }),
 ];
 
+/** `YYYY-MM-DD` for `daysAgo` days before today, in local time. */
+function previewDay(daysAgo: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() - daysAgo);
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
+/**
+ * 14 days of merged spend ending today. Dates are generated relative to the
+ * current day so the preview charts always end on "today" rather than drifting
+ * away from a hard-coded month.
+ */
+function previewDailySpend(): { date: string; value: number }[] {
+  const shape = [1.42, 2.05, 1.18, 2.86, 1.9, 3.4, 2.47, 1.7, 3.98, 3.05, 2.3, 3.76, 4.68, 2.14];
+  return shape.map((value, index) => ({
+    date: previewDay(shape.length - 1 - index),
+    value,
+  }));
+}
+
 function chart(providerId: string): ProviderChartData {
   return {
     providerId,
-    costHistory: [
-      { date: "2026-08-02", value: 2.2 },
-      { date: "2026-08-03", value: 3.6 },
-      { date: "2026-08-04", value: 1.9 },
-      { date: "2026-08-05", value: 4.1 },
-      { date: "2026-08-06", value: 2.8 },
-      { date: "2026-08-07", value: 3.3 },
-      { date: "2026-08-08", value: 2.5 },
-    ],
+    costHistory: [2.2, 3.6, 1.9, 4.1, 2.8, 3.3, 2.5].map((value, index) => ({
+      date: previewDay(6 - index),
+      value,
+    })),
     creditsHistory: [],
     usageBreakdown: [],
     localUsage: {
@@ -471,14 +488,18 @@ export function installPreviewBackend() {
         return [];
       case "get_provider_local_usage_summary":
         return chart(String(args.providerId ?? "codex")).localUsage;
-      case "get_usage_spend_summary":
+      case "get_usage_spend_summary": {
+        const daily = previewDailySpend();
         return {
           rows: [
             { providerId: "codex", displayName: "Codex", sevenDay: 12.84, thirtyDay: 41.26, currency: "USD", source: "本机日志" },
             { providerId: "claude", displayName: "Claude", sevenDay: 18, thirtyDay: 72, currency: "USD", source: "供应商账单" },
             { providerId: "alibabatokenplan", displayName: "Qwen Code", sevenDay: 36.5, thirtyDay: 128.2, currency: "CNY", source: "供应商账单" },
           ],
+          today: daily[daily.length - 1]?.value ?? null,
+          daily,
         };
+      }
       case "list_detected_browsers":
         return [
           { browserType: "chrome", displayName: "Google Chrome", profileCount: 2 },

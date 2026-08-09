@@ -11,6 +11,9 @@ import { useFormattedResetTime } from "../../../hooks/useFormattedResetTime";
 import { useProviders } from "../../../hooks/useProviders";
 import { reorderProviders } from "../../../lib/tauri";
 import { ProviderDetailPane } from "../providers/ProviderDetailPane";
+import { ProviderIcon } from "../../../components/providers/ProviderIcon";
+import { getProviderIcon } from "../../../components/providers/providerIcons";
+import type { LocaleKey } from "../../../i18n/keys";
 
 interface ProvidersTabProps {
   settings: BootstrapState["settings"];
@@ -38,11 +41,14 @@ function authSummary(providerId: string) {
     .join(" · ");
 }
 
-function statusLabel(enabled: boolean, snapshot: ProviderUsageSnapshot | null) {
-  if (!enabled) return "未配置";
-  if (!snapshot) return "等待数据";
-  if (snapshot.error) return "需要处理";
-  return "已连接";
+function statusLabelKey(
+  enabled: boolean,
+  snapshot: ProviderUsageSnapshot | null,
+): LocaleKey {
+  if (!enabled) return "ProviderStatusNotConfigured";
+  if (!snapshot) return "ProviderStatusWaiting";
+  if (snapshot.error) return "ProviderStatusNeedsAttention";
+  return "ProviderStatusConnected";
 }
 
 function ProviderOverviewRow({
@@ -53,6 +59,7 @@ function ProviderOverviewRow({
   disabled,
   canMoveUp,
   canMoveDown,
+  t,
   onOpen,
   onToggle,
   onMove,
@@ -64,6 +71,7 @@ function ProviderOverviewRow({
   disabled: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  t: (key: LocaleKey) => string;
   onOpen: () => void;
   onToggle: (enabled: boolean) => void;
   onMove: (delta: -1 | 1) => void;
@@ -91,13 +99,20 @@ function ProviderOverviewRow({
         className="provider-overview__identity"
         onClick={onOpen}
       >
+        <span
+          className="provider-overview__brand"
+          style={{ background: getProviderIcon(provider.id).brandColor }}
+        >
+          <ProviderIcon providerId={provider.id} size={18} />
+        </span>
         <span>
           <strong>{provider.displayName}</strong>
-          <small>{authSummary(provider.id)}</small>
+          <small>{provider.id}</small>
         </span>
       </button>
+      <span className="provider-overview__auth">{authSummary(provider.id)}</span>
       <span className="provider-overview__status">
-        {statusLabel(enabled, snapshot)}
+        {t(statusLabelKey(enabled, snapshot))}
       </span>
       <span className="provider-overview__metric">
         {snapshot?.error ? snapshot.error : `${percent}${reset ? ` · ${reset}` : ""}`}
@@ -106,7 +121,7 @@ function ProviderOverviewRow({
         <button
           type="button"
           disabled={!canMoveUp || disabled}
-          aria-label={`上移 ${provider.displayName}`}
+          aria-label={t("ProviderMoveUp").replace("{}", provider.displayName)}
           onClick={() => onMove(-1)}
         >
           ↑
@@ -114,7 +129,7 @@ function ProviderOverviewRow({
         <button
           type="button"
           disabled={!canMoveDown || disabled}
-          aria-label={`下移 ${provider.displayName}`}
+          aria-label={t("ProviderMoveDown").replace("{}", provider.displayName)}
           onClick={() => onMove(1)}
         >
           ↓
@@ -125,7 +140,7 @@ function ProviderOverviewRow({
           type="checkbox"
           checked={enabled}
           disabled={disabled}
-          aria-label={`${provider.displayName} 已启用`}
+          aria-label={t("ProviderToggleEnabled").replace("{}", provider.displayName)}
           onChange={(event) => onToggle(event.currentTarget.checked)}
         />
         <span aria-hidden />
@@ -241,53 +256,58 @@ export default function ProvidersTab({
 
   return (
     <section className="provider-overview">
-      <header className="provider-overview__header">
-        <div>
-          <h2>{t("TabProviders")}</h2>
-          <p>已启用 {enabled.size} 个 · 共 {providers.length} 个</p>
-        </div>
-        <label className="provider-overview__search">
-          <span className="sr-only">{t("ProviderSidebarSearch")}</span>
-          <input
-            ref={searchRef}
-            type="search"
-            value={search}
-            placeholder={`搜索 ${providers.length} 个供应商`}
-            onChange={(event) => setSearch(event.currentTarget.value)}
-          />
-        </label>
-        <button
-          type="button"
-          className="provider-overview__add"
-          onClick={() => {
-            setSearch("");
-            searchRef.current?.focus();
-          }}
-        >
-          添加供应商
-        </button>
-      </header>
+      <div className="provider-overview__panel">
+        <header className="provider-overview__header">
+          <span className="provider-overview__count">
+            {t("ProvidersEnabledOfTotal")
+              .replace("{}", String(enabled.size))
+              .replace("{}", String(providers.length))}
+          </span>
+          <label className="provider-overview__search">
+            <span className="sr-only">{t("ProviderSidebarSearch")}</span>
+            <input
+              ref={searchRef}
+              type="search"
+              value={search}
+              placeholder={t("ProvidersSearchPlaceholder")}
+              onChange={(event) => setSearch(event.currentTarget.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="provider-overview__add"
+            onClick={() => {
+              setSearch("");
+              searchRef.current?.focus();
+            }}
+          >
+            {t("ProvidersAddButton")}
+          </button>
+        </header>
 
-      <div className="provider-overview__list">
-        {visibleProviders.map((provider, index) => (
-          <ProviderOverviewRow
-            key={provider.id}
-            provider={provider}
-            snapshot={snapshotsById.get(provider.id) ?? null}
-            enabled={enabled.has(provider.id)}
-            resetTimeRelative={settings.resetTimeRelative}
-            disabled={saving}
-            canMoveUp={index > 0}
-            canMoveDown={index < visibleProviders.length - 1}
-            onOpen={() => setSelectedId(provider.id)}
-            onToggle={(on) => toggle(provider.id, on)}
-            onMove={(delta) => move(provider.id, delta)}
-          />
-        ))}
-        {visibleProviders.length === 0 ? (
-          <div className="provider-overview__empty">没有匹配的供应商</div>
-        ) : null}
+        <div className="provider-overview__list">
+          {visibleProviders.map((provider, index) => (
+            <ProviderOverviewRow
+              key={provider.id}
+              provider={provider}
+              snapshot={snapshotsById.get(provider.id) ?? null}
+              enabled={enabled.has(provider.id)}
+              resetTimeRelative={settings.resetTimeRelative}
+              disabled={saving}
+              canMoveUp={index > 0}
+              canMoveDown={index < visibleProviders.length - 1}
+              t={t}
+              onOpen={() => setSelectedId(provider.id)}
+              onToggle={(on) => toggle(provider.id, on)}
+              onMove={(delta) => move(provider.id, delta)}
+            />
+          ))}
+          {visibleProviders.length === 0 ? (
+            <div className="provider-overview__empty">{t("ProvidersNoMatches")}</div>
+          ) : null}
+        </div>
       </div>
+      <p className="provider-overview__hint">{t("ProvidersCredentialHint")}</p>
     </section>
   );
 }

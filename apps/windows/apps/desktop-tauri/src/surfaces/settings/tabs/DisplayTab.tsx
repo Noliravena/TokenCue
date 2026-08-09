@@ -2,13 +2,42 @@ import { useCallback, useEffect, useState } from "react";
 import { useLocale } from "../../../hooks/useLocale";
 import { Field, Select, Toggle } from "../../../components/FormControls";
 import type { MenuBarDisplayMode, TrayIconMode, TrayVisibilityStatusDto } from "../../../types/bridge";
+import type { LocaleKey } from "../../../i18n/keys";
 import type { TabProps } from "../settingsTabs";
+import { ProviderIcon } from "../../../components/providers/ProviderIcon";
+import { getProviderIcon } from "../../../components/providers/providerIcons";
 import FloatBarSettingsSection from "../../../floatbar/SettingsSection";
 import { getTrayVisibilityStatus } from "../../../lib/tauri";
 
 function clampWindowScalePercent(value: number): number {
   return Math.min(250, Math.max(100, Number.isFinite(value) ? value : 100));
 }
+
+/**
+ * Tray label layouts, shown as selectable sample renders rather than a
+ * dropdown so the difference between them is visible before choosing.
+ */
+const DISPLAY_MODES: {
+  value: MenuBarDisplayMode;
+  labelKey: LocaleKey;
+  descKey: LocaleKey;
+}[] = [
+  {
+    value: "detailed",
+    labelKey: "DisplayModeDetailed",
+    descKey: "DisplayModeDetailedSample",
+  },
+  {
+    value: "compact",
+    labelKey: "DisplayModeCompact",
+    descKey: "DisplayModeCompactSample",
+  },
+  {
+    value: "minimal",
+    labelKey: "DisplayModeMinimal",
+    descKey: "DisplayModeMinimalSample",
+  },
+];
 
 export default function DisplayTab({
   mode = "menu",
@@ -21,6 +50,9 @@ export default function DisplayTab({
     clampWindowScalePercent(settings.windowScalePercent),
   );
   const [trayVisibility, setTrayVisibility] = useState<TrayVisibilityStatusDto | null>(null);
+  // Sample the user's own first provider so the preview matches what their
+  // tray actually shows; Codex stands in before anything is enabled.
+  const previewProviderId = settings.enabledProviders?.[0] ?? "codex";
 
   useEffect(() => {
     getTrayVisibilityStatus()
@@ -92,23 +124,6 @@ export default function DisplayTab({
             />
           </Field>
           <Field
-            label={t("DisplayModeLabel")}
-            description={t("DisplayModeHelper")}
-          >
-            <Select
-              value={settings.menuBarDisplayMode}
-              disabled={saving}
-              options={[
-                { value: "detailed", label: t("DisplayModeDetailed") },
-                { value: "compact", label: t("DisplayModeCompact") },
-                { value: "minimal", label: t("DisplayModeMinimal") },
-              ]}
-              onChange={(v) =>
-                set({ menuBarDisplayMode: v as MenuBarDisplayMode })
-              }
-            />
-          </Field>
-          <Field
             label={t("PromoteTrayIconLabel")}
             description={
               trayVisibility?.support === "supported"
@@ -125,6 +140,44 @@ export default function DisplayTab({
           </Field>
         </div>
       </section>}
+
+      {mode === "menuBar" && (
+        <section className="settings-section">
+          <h3 className="settings-section__title">{t("DisplayModeLabel")}</h3>
+          <div className="display-mode-grid" role="radiogroup" aria-label={t("DisplayModeLabel")}>
+            {DISPLAY_MODES.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                role="radio"
+                aria-checked={settings.menuBarDisplayMode === option.value}
+                disabled={saving}
+                className={`display-mode-card${
+                  settings.menuBarDisplayMode === option.value
+                    ? " display-mode-card--active"
+                    : ""
+                }`}
+                onClick={() => set({ menuBarDisplayMode: option.value })}
+              >
+                <span className="display-mode-card__name">{t(option.labelKey)}</span>
+                <span className="display-mode-card__preview">
+                  <span
+                    className="display-mode-card__brand"
+                    style={{ background: getProviderIcon(previewProviderId).brandColor }}
+                  >
+                    <ProviderIcon providerId={previewProviderId} size={11} />
+                  </span>
+                  {option.value !== "minimal" && <span>96%</span>}
+                  {option.value === "detailed" && (
+                    <span className="display-mode-card__reset">6d 16h</span>
+                  )}
+                </span>
+                <span className="display-mode-card__desc">{t(option.descKey)}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ── Menu content ─────────────────────────────────────────── */}
       {mode === "menu" && <section className="settings-section">

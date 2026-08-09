@@ -4,7 +4,7 @@ import { getAppInfo, openExternalUrl } from "../../../lib/tauri";
 import type { AppInfoBridge } from "../../../types/bridge";
 import type { LocaleKey } from "../../../i18n/keys";
 import type { TabProps } from "../settingsTabs";
-import tokencueIcon from "../../../assets/tokencue-icon.png";
+import { BrandMark } from "../../../components/BrandMark";
 
 const TOKENCUE_GITHUB = "https://github.com/Noliravena/TokenCue";
 const TOKENCUE_NOTICES =
@@ -53,7 +53,7 @@ export default function AboutTab(_props: TabProps) {
   return (
     <section className="settings-section about-section">
       <div className="about-header">
-        <img className="about-icon" src={tokencueIcon} alt={t("AppName")} />
+        <BrandMark className="about-icon" size={82} />
         <div className="about-title-block">
           <h2 className="about-title">{appInfo.name}</h2>
           <p className="about-version">
