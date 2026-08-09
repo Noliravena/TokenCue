@@ -1,5 +1,9 @@
 <p align="center">
-  <img src="apps/windows/apps/desktop-tauri/src/assets/tokencue-icon.png" width="112" alt="TokenCue logo">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/tokencue-mark-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/tokencue-mark.svg">
+    <img src="docs/assets/tokencue-mark.svg" width="112" alt="TokenCue logo">
+  </picture>
 </p>
 
 <h1 align="center">TokenCue</h1>
