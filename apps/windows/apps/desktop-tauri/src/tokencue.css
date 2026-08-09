@@ -930,6 +930,7 @@ select:focus-visible {
 
 .settings-titlebar__title {
   display: inline-flex;
+  flex: none;
   align-items: center;
   gap: 8px;
   /* The legacy rule hard-codes white for a #1e1e1e caption bar; the warm
@@ -938,6 +939,21 @@ select:focus-visible {
   font-family: var(--tb-type-display-family);
   font-size: 18px;
   font-weight: 600;
+}
+
+
+.settings-titlebar__traffic {
+  position: absolute;
+  left: 16px;
+  display: flex;
+  gap: 10px;
+}
+
+.settings-titlebar__traffic > span {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--tb-text) 16%, transparent);
 }
 
 .settings-titlebar__controls {

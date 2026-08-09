@@ -187,6 +187,10 @@ export default function Settings({ state, initialTab: propTab }: { state: Bootst
     >
       {/* custom title bar (decorations disabled for guaranteed theme) */}
       <div className="settings-titlebar" data-tauri-drag-region>
+        <span className="settings-titlebar__traffic" aria-hidden>
+          <span />
+          <span />
+        </span>
         <span className="settings-titlebar__title" data-tauri-drag-region>
           <BrandMark size={20} />
           {t("SettingsWindowTitle")}
