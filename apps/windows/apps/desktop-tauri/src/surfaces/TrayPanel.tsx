@@ -2,24 +2,23 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   BootstrapState,
   ProviderChartData,
   ProviderUsageSnapshot,
   RateWindowSnapshot,
+  SettingsUpdate,
   UsageSpendSummary,
 } from "../types/bridge";
 import {
-  beginFlyoutGesture,
   getAppInfo,
   getProviderChartData,
   getUsageSpendSummary,
-  updateSettings,
 } from "../lib/tauri";
 import {
   REFRESH_CADENCE_OPTIONS,
@@ -31,6 +30,11 @@ import { useFormattedResetTime } from "../hooks/useFormattedResetTime";
 import { formatRelativeUpdated } from "../lib/relativeTime";
 import { formatChartDay, formatEventTime } from "../lib/eventTime";
 import { providerSupportsChartData } from "../lib/providerCharts";
+import {
+  readTrayHistory,
+  updateTrayHistory,
+  type TrayHistoryEvent,
+} from "../lib/trayHistory";
 import { languageTag } from "../i18n/languageTag";
 import { ProviderIcon } from "../components/providers/ProviderIcon";
 import { getProviderIcon } from "../components/providers/providerIcons";
@@ -127,6 +131,150 @@ function formatMoney(
   } catch {
     return `$${value.toFixed(2)}`;
   }
+}
+
+function compactCount(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value) || value <= 0) return "—";
+  return new Intl.NumberFormat("en-US", {
+    notation: "compact",
+    maximumFractionDigits: value >= 1_000_000 ? 1 : 0,
+  }).format(value);
+}
+
+function maskedAccount(value: string, hidden: boolean) {
+  if (!hidden) return value;
+  const at = value.indexOf("@");
+  if (at <= 1) return "••••";
+  return `${value.slice(0, 1)}•••${value.slice(at)}`;
+}
+
+function paceLabelKey(
+  stage: NonNullable<ProviderUsageSnapshot["pace"]>["stage"],
+): LocaleKey {
+  switch (stage) {
+    case "slightly_ahead":
+      return "DetailPaceSlightlyAhead";
+    case "ahead":
+      return "DetailPaceAhead";
+    case "far_ahead":
+      return "DetailPaceFarAhead";
+    case "slightly_behind":
+      return "DetailPaceSlightlyBehind";
+    case "behind":
+      return "DetailPaceBehind";
+    case "far_behind":
+      return "DetailPaceFarBehind";
+    default:
+      return "DetailPaceOnTrack";
+  }
+}
+
+interface CachedSpendState {
+  value: UsageSpendSummary | null;
+  loaded: boolean;
+  refreshing: boolean;
+}
+
+/**
+ * Fetch the expensive secondary tab data once while Quota is visible, then
+ * retain the last successful result. A provider refresh updates the cache in
+ * the background without clearing the rendered data.
+ */
+function useTrayDataCache(
+  providers: ProviderUsageSnapshot[],
+  refreshRevision: unknown,
+) {
+  const [spend, setSpend] = useState<CachedSpendState>({
+    value: null,
+    loaded: false,
+    refreshing: false,
+  });
+  const [charts, setCharts] = useState<
+    Map<string, ProviderChartData | null>
+  >(new Map());
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+
+  const chartProviderKey = useMemo(
+    () =>
+      providers
+        .filter((provider) => providerSupportsChartData(provider.providerId))
+        .map((provider) => provider.providerId)
+        .sort()
+        .join("\u0000"),
+    [providers],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setSpend((current) => ({
+      ...current,
+      refreshing: current.loaded,
+    }));
+    void getUsageSpendSummary()
+      .then((next) => {
+        if (!cancelled) {
+          setSpend({ value: next, loaded: true, refreshing: false });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSpend((current) =>
+            current.loaded
+              ? { ...current, refreshing: false }
+              : {
+                  value: { rows: [], today: null, daily: [] },
+                  loaded: true,
+                  refreshing: false,
+                },
+          );
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshRevision]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const providerIds = chartProviderKey ? chartProviderKey.split("\u0000") : [];
+    for (const providerId of providerIds) {
+      void getProviderChartData(providerId)
+        .then((next) => {
+          if (cancelled) return;
+          setCharts((current) => {
+            const updated = new Map(current);
+            updated.set(providerId, next);
+            return updated;
+          });
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setCharts((current) => {
+            if (current.has(providerId)) return current;
+            const updated = new Map(current);
+            updated.set(providerId, null);
+            return updated;
+          });
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [chartProviderKey, refreshRevision]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getAppInfo()
+      .then((info) => {
+        if (!cancelled) setAppVersion(info.version);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { spend, charts, appVersion };
 }
 
 function displayPercent(
@@ -244,14 +392,261 @@ function LinkIcon({ tone }: { tone: LinkTone }) {
   );
 }
 
+function QuotaWindowRow({
+  label,
+  snapshot,
+  settings,
+  t,
+}: {
+  label: string;
+  snapshot: RateWindowSnapshot;
+  settings: BootstrapState["settings"];
+  t: Translate;
+}) {
+  const reset = useFormattedResetTime(
+    snapshot.resetsAt,
+    snapshot.resetDescription,
+    settings.resetTimeRelative,
+  );
+  const shown = displayPercent(snapshot.usedPercent, settings.showAsUsed);
+  const level = levelFor(
+    snapshot,
+    settings.highUsageThreshold,
+    settings.criticalUsageThreshold,
+  );
+  const informational = snapshot.isInformational === true;
+
+  return (
+    <div className="tokencue-tray__metric">
+      <div className="tokencue-tray__metric-head">
+        <span>{label}</span>
+        <strong data-level={level}>
+          {informational
+            ? snapshot.resetDescription || reset || "—"
+            : `${Math.round(shown.value)}% ${t(shown.labelKey)}`}
+        </strong>
+      </div>
+      {!informational ? (
+        <div className="tokencue-tray__track tokencue-tray__track--detail" aria-hidden>
+          <span
+            className="tokencue-tray__fill"
+            data-level={level}
+            style={{ width: `${Math.max(0, Math.min(100, shown.value))}%` }}
+          />
+        </div>
+      ) : null}
+      {reset && reset !== snapshot.resetDescription ? (
+        <span className="tokencue-tray__metric-reset tokencue-tray__mono">{reset}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function QuotaDetails({
+  provider,
+  settings,
+  chartData,
+  t,
+  onOpenSettings,
+}: {
+  provider: ProviderUsageSnapshot;
+  settings: BootstrapState["settings"];
+  chartData: ProviderChartData | null | undefined;
+  t: Translate;
+  onOpenSettings: () => void;
+}) {
+  const costReset = useFormattedResetTime(
+    provider.cost?.resetsAt ?? null,
+    null,
+    settings.resetTimeRelative,
+  );
+  const metrics: Array<{ id: string; label: string; snapshot: RateWindowSnapshot }> = [
+    {
+      id: "primary",
+      label: provider.primaryLabel || t("DetailWindowPrimary"),
+      snapshot: provider.primary,
+    },
+  ];
+  if (provider.secondary) {
+    metrics.push({
+      id: "secondary",
+      label: provider.secondaryLabel || t("DetailWindowSecondary"),
+      snapshot: provider.secondary,
+    });
+  }
+  if (provider.modelSpecific) {
+    metrics.push({
+      id: "model",
+      label: t("DetailWindowModelSpecific"),
+      snapshot: provider.modelSpecific,
+    });
+  }
+  if (provider.tertiary) {
+    metrics.push({
+      id: "tertiary",
+      label: t("DetailWindowTertiary"),
+      snapshot: provider.tertiary,
+    });
+  }
+  for (const extra of provider.extraRateWindows) {
+    metrics.push({ id: extra.id, label: extra.title, snapshot: extra.window });
+  }
+
+  const localUsage = chartData?.localUsage ?? null;
+  const wayfinder = provider.wayfinderUsage ?? null;
+
+  return (
+    <div className="tokencue-tray__details">
+      <section className="tokencue-tray__detail-section">
+        {metrics.map((metric) => (
+          <QuotaWindowRow
+            key={metric.id}
+            label={metric.label}
+            snapshot={metric.snapshot}
+            settings={settings}
+            t={t}
+          />
+        ))}
+      </section>
+
+      {provider.cost ? (
+        <section className="tokencue-tray__detail-section tokencue-tray__detail-grid">
+          <span>
+            <small>{t("DetailCostUsed")}</small>
+            <strong>
+              {provider.cost.formattedUsed ||
+                formatMoney(provider.cost.used, provider.cost.currencyCode)}
+            </strong>
+          </span>
+          <span>
+            <small>
+              {provider.cost.balance != null
+                ? t("DetailCostBalance")
+                : t("DetailCostRemaining")}
+            </small>
+            <strong>
+              {provider.cost.balance != null
+                ? provider.cost.formattedBalance ||
+                  formatMoney(provider.cost.balance, provider.cost.currencyCode)
+                : formatMoney(provider.cost.remaining, provider.cost.currencyCode)}
+            </strong>
+          </span>
+          {costReset ? (
+            <span className="tokencue-tray__detail-grid-wide">
+              <small>{t("DetailCostResets")}</small>
+              <strong>{costReset}</strong>
+            </span>
+          ) : null}
+        </section>
+      ) : null}
+
+      {localUsage ? (
+        <section className="tokencue-tray__detail-section tokencue-tray__detail-grid">
+          <span>
+            <small>{t("PanelToday")}</small>
+            <strong>{formatMoney(localUsage.todayCost, "USD")}</strong>
+          </span>
+          <span>
+            <small>{t("PanelThirtyDayCost")}</small>
+            <strong>{formatMoney(localUsage.thirtyDayCost, "USD")}</strong>
+          </span>
+          <span>
+            <small>{t("PanelThirtyDayTokens")}</small>
+            <strong>{compactCount(localUsage.thirtyDayTokens)}</strong>
+          </span>
+          <span>
+            <small>{t("PanelLatestTokens")}</small>
+            <strong>{compactCount(localUsage.latestTokens)}</strong>
+          </span>
+          {localUsage.topModel ? (
+            <span className="tokencue-tray__detail-grid-wide">
+              <small>{t("PanelTopModelPrefix")}</small>
+              <strong>{localUsage.topModel}</strong>
+            </span>
+          ) : null}
+        </section>
+      ) : null}
+
+      {wayfinder ? (
+        <section className="tokencue-tray__detail-section tokencue-tray__detail-grid">
+          <span>
+            <small>{t("WayfinderGatewayStatus")}</small>
+            <strong>{wayfinder.gatewayStatus}</strong>
+          </span>
+          <span>
+            <small>{t("WayfinderModels")}</small>
+            <strong>{wayfinder.modelCount}</strong>
+          </span>
+          <span>
+            <small>{t("WayfinderRequests")}</small>
+            <strong>{compactCount(wayfinder.requests)}</strong>
+          </span>
+          <span>
+            <small>{t("WayfinderTokens")}</small>
+            <strong>{compactCount(wayfinder.tokens)}</strong>
+          </span>
+        </section>
+      ) : null}
+
+      {provider.pace ? (
+        <section className="tokencue-tray__detail-section">
+          <div className="tokencue-tray__pace-head">
+            <span>{t("DetailPaceTitle")}</span>
+            <strong>
+              {t(paceLabelKey(provider.pace.stage))} ({provider.pace.deltaPercent >= 0 ? "+" : ""}
+              {provider.pace.deltaPercent.toFixed(1)}%)
+            </strong>
+          </div>
+          <div className="tokencue-tray__pace-bars" aria-hidden>
+            <span style={{ width: `${provider.pace.expectedUsedPercent}%` }} />
+            <span style={{ width: `${provider.pace.actualUsedPercent}%` }} />
+          </div>
+          <p className="tokencue-tray__hint">
+            {provider.pace.willLastToReset
+              ? t("DetailPaceWillLastToReset")
+              : `${t("DetailPaceRunsOutIn")} ${provider.pace.etaSeconds == null ? "—" : compactEta(provider.pace.etaSeconds)}`}
+          </p>
+        </section>
+      ) : null}
+
+      <section className="tokencue-tray__detail-section tokencue-tray__account-line">
+        <span>
+          {[provider.accountEmail, provider.accountOrganization]
+            .filter(Boolean)
+            .map((value) => maskedAccount(String(value), settings.hidePersonalInfo))
+            .join(" · ") || provider.sourceLabel}
+        </span>
+        <span className="tokencue-tray__mono">
+          {t("Source")}: {provider.sourceLabel}
+        </span>
+      </section>
+
+      <button
+        type="button"
+        className="tokencue-tray__pill-btn tokencue-tray__details-action"
+        aria-label={`${provider.displayName} ${t("ProviderSettingsTitle")}`}
+        onClick={onOpenSettings}
+      >
+        {t("ProviderSettingsTitle")}
+      </button>
+    </div>
+  );
+}
+
 function QuotaCard({
   provider,
   settings,
+  chartData,
+  expanded,
+  onToggle,
   t,
   onFix,
 }: {
   provider: ProviderUsageSnapshot;
   settings: BootstrapState["settings"];
+  chartData: ProviderChartData | null | undefined;
+  expanded: boolean;
+  onToggle: () => void;
   t: Translate;
   onFix: () => void;
 }) {
@@ -274,6 +669,7 @@ function QuotaCard({
     stale ? "tokencue-tray__card--stale" : "",
     provider.error ? "tokencue-tray__card--error" : "",
     level === "critical" ? "tokencue-tray__card--critical" : "",
+    expanded ? "tokencue-tray__card--expanded" : "",
   ]
     .filter(Boolean)
     .join(" ");
@@ -321,6 +717,15 @@ function QuotaCard({
           </span>
           <span className="tokencue-tray__card-pct-label">{t(shown.labelKey)}</span>
         </span>
+        <button
+          type="button"
+          className="tokencue-tray__disclosure"
+          aria-label={`${provider.displayName} ${t("ProviderInfo")}`}
+          aria-expanded={expanded}
+          onClick={onToggle}
+        >
+          <span aria-hidden>⌄</span>
+        </button>
       </div>
       <div className="tokencue-tray__track" aria-hidden>
         <span
@@ -351,6 +756,15 @@ function QuotaCard({
           ) : null}
         </div>
       )}
+      {expanded ? (
+        <QuotaDetails
+          provider={provider}
+          settings={settings}
+          chartData={chartData}
+          t={t}
+          onOpenSettings={onFix}
+        />
+      ) : null}
     </article>
   );
 }
@@ -358,33 +772,18 @@ function QuotaCard({
 function SpendTab({
   t,
   locale,
-  openSettings,
+  summary,
+  loading,
+  refreshing,
+  openUsageSpend,
 }: {
   t: Translate;
   locale: string;
-  openSettings: () => void;
+  summary: UsageSpendSummary | null;
+  loading: boolean;
+  refreshing: boolean;
+  openUsageSpend: () => void;
 }) {
-  const [summary, setSummary] = useState<UsageSpendSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void getUsageSpendSummary()
-      .then((next) => {
-        if (!cancelled) setSummary(next);
-      })
-      .catch(() => {
-        if (!cancelled) setSummary({ rows: [] });
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const rows = summary?.rows ?? [];
   const daily = summary?.daily ?? [];
   // Providers bill in their own currencies and TokenCue never applies an
@@ -438,7 +837,7 @@ function SpendTab({
     return (
       <div className="tokencue-tray__body">
         <p className="tokencue-tray__hint">{t("UsageSpendEmpty")}</p>
-        <button type="button" className="tokencue-tray__cta" onClick={openSettings}>
+        <button type="button" className="tokencue-tray__cta" onClick={openUsageSpend}>
           {t("TrayOpenFullSettings")}
         </button>
       </div>
@@ -446,7 +845,7 @@ function SpendTab({
   }
 
   return (
-    <div className="tokencue-tray__body">
+    <div className="tokencue-tray__body" aria-busy={refreshing}>
       <article className="tokencue-tray__card tokencue-tray__card--stack">
         <div className="tokencue-tray__spend-hero">
           <span>
@@ -520,11 +919,23 @@ function HistoryTab({
   settings,
   t,
   locale,
+  charts,
+  chartProviderId,
+  onChartProviderChange,
+  range,
+  onRangeChange,
+  historyEvents,
 }: {
   providers: ProviderUsageSnapshot[];
   settings: BootstrapState["settings"];
   t: Translate;
   locale: string;
+  charts: ReadonlyMap<string, ProviderChartData | null>;
+  chartProviderId: string | null;
+  onChartProviderChange: (providerId: string) => void;
+  range: HistoryRange;
+  onRangeChange: (range: HistoryRange) => void;
+  historyEvents: TrayHistoryEvent[];
 }) {
   // Only a few providers ship a real per-day series; the rest would need an
   // invented curve, so the chart card simply does not appear for them.
@@ -532,33 +943,12 @@ function HistoryTab({
     () => providers.filter((provider) => providerSupportsChartData(provider.providerId)),
     [providers],
   );
-  const [chartProviderId, setChartProviderId] = useState<string | null>(null);
-  const [range, setRange] = useState<HistoryRange>(7);
-  const [chart, setChart] = useState<ProviderChartData | null>(null);
-
   const activeProvider =
     chartable.find((provider) => provider.providerId === chartProviderId) ??
     chartable[0] ??
     null;
   const activeId = activeProvider?.providerId ?? null;
-
-  useEffect(() => {
-    if (!activeId) {
-      setChart(null);
-      return;
-    }
-    let cancelled = false;
-    void getProviderChartData(activeId)
-      .then((next) => {
-        if (!cancelled) setChart(next);
-      })
-      .catch(() => {
-        if (!cancelled) setChart(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [activeId]);
+  const chart = activeId ? charts.get(activeId) ?? null : null;
 
   // These are current alerts derived from the latest snapshots, not a
   // persisted event ledger. Keep the UI language honest about that scope.
@@ -617,6 +1007,43 @@ function HistoryTab({
     return rows.sort((left, right) => right.at - left.at).slice(0, 6);
   }, [locale, providers, settings, t]);
 
+  const eventRows = useMemo(
+    () =>
+      historyEvents.slice(0, 12).map((event) => {
+        let detail: string;
+        let tone = "normal";
+        switch (event.kind) {
+          case "warning":
+            detail = `${Math.round(event.usedPercent ?? 0)}% ${t("PanelUsedSuffix")}`;
+            tone = "warning";
+            break;
+          case "critical":
+            detail = `${Math.round(event.usedPercent ?? 0)}% ${t("PanelUsedSuffix")}`;
+            tone = "critical";
+            break;
+          case "reset":
+            detail = `${Math.round(event.usedPercent ?? 0)}% ${t("PanelUsedSuffix")}`;
+            break;
+          case "error":
+            detail = t("ProviderStatusNeedsAttention");
+            tone = "critical";
+            break;
+          case "recovered":
+          case "connected":
+            detail = t("ProviderStatusConnected");
+            break;
+        }
+        return {
+          title: event.displayName,
+          detail,
+          tone,
+          time: formatEventTime(new Date(event.at).toISOString(), Date.now(), locale),
+        };
+      }),
+    [historyEvents, locale, t],
+  );
+  const visibleEvents = eventRows.length > 0 ? eventRows : alerts;
+
   const series = useMemo(() => {
     const source =
       chart && chart.costHistory.length > 0
@@ -643,7 +1070,9 @@ function HistoryTab({
                 className="tokencue-tray__chip tokencue-tray__chip--select"
                 aria-label={t("TrayHistoryProviderLabel")}
                 value={activeProvider.providerId}
-                onChange={(event) => setChartProviderId(event.currentTarget.value)}
+                onChange={(event) =>
+                  onChartProviderChange(event.currentTarget.value)
+                }
               >
                 {chartable.map((provider) => (
                   <option key={provider.providerId} value={provider.providerId}>
@@ -659,7 +1088,7 @@ function HistoryTab({
               aria-label={t("TrayHistoryRangeLabel")}
               value={range}
               onChange={(event) =>
-                setRange(Number(event.currentTarget.value) as HistoryRange)
+                onRangeChange(Number(event.currentTarget.value) as HistoryRange)
               }
             >
               {HISTORY_RANGES.map((days) => (
@@ -688,14 +1117,16 @@ function HistoryTab({
         </article>
       ) : null}
 
-      <p className="tokencue-tray__eyebrow">{t("TrayCurrentAlerts")}</p>
+      <p className="tokencue-tray__eyebrow">
+        {eventRows.length > 0 ? t("TrayTabHistory") : t("TrayCurrentAlerts")}
+      </p>
       <article className="tokencue-tray__card tokencue-tray__card--list">
-        {alerts.length === 0 ? (
+        {visibleEvents.length === 0 ? (
           <p className="tokencue-tray__hint tokencue-tray__hint--inset">
             {t("TrayNoCurrentAlerts")}
           </p>
         ) : (
-          alerts.map((event, index) => (
+          visibleEvents.map((event, index) => (
             <div key={`${event.title}-${index}`} className="tokencue-tray__event">
               <span className="tokencue-tray__event-dot" data-tone={event.tone} />
               <span className="tokencue-tray__event-copy">
@@ -715,36 +1146,27 @@ function HistoryTab({
 
 function SettingsTab({
   settings,
+  appVersion,
   t,
+  updatePanelSettings,
   openSettings,
+  openProviderSettings,
   openUsageSpend,
   openMenuBarSettings,
   openFloatBarSettings,
   openAbout,
 }: {
   settings: BootstrapState["settings"];
+  appVersion: string | null;
   t: Translate;
+  updatePanelSettings: (patch: SettingsUpdate) => Promise<void>;
   openSettings: () => void;
+  openProviderSettings: () => void;
   openUsageSpend: () => void;
   openMenuBarSettings: () => void;
   openFloatBarSettings: () => void;
   openAbout: () => void;
 }) {
-  const [appVersion, setAppVersion] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    void getAppInfo()
-      .then((info) => {
-        if (!cancelled) setAppVersion(info.version);
-      })
-      .catch(() => {
-        if (!cancelled) setAppVersion(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   const displayModeLabel = t(
     settings.menuBarDisplayMode === "compact"
       ? "DisplayModeCompact"
@@ -766,7 +1188,7 @@ function SettingsTab({
         "{}",
         String(settings.enabledProviders.length),
       ),
-      onClick: openSettings,
+      onClick: openProviderSettings,
     },
     {
       tone: "menuBar",
@@ -804,7 +1226,7 @@ function SettingsTab({
           </span>
           <Toggle
             checked={settings.showNotifications}
-            onChange={(v) => void updateSettings({ showNotifications: v })}
+            onChange={(v) => void updatePanelSettings({ showNotifications: v })}
             ariaLabel={t("ShowNotifications")}
           />
         </label>
@@ -815,7 +1237,7 @@ function SettingsTab({
           </span>
           <Toggle
             checked={settings.showAsUsed}
-            onChange={(v) => void updateSettings({ showAsUsed: v })}
+            onChange={(v) => void updatePanelSettings({ showAsUsed: v })}
             ariaLabel={t("ShowUsageAsUsed")}
           />
         </label>
@@ -829,7 +1251,9 @@ function SettingsTab({
             aria-label={t("RefreshIntervalLabel")}
             value={refreshCadenceValue(settings)}
             onChange={(event) =>
-              void updateSettings(refreshCadencePatch(event.currentTarget.value))
+              void updatePanelSettings(
+                refreshCadencePatch(event.currentTarget.value),
+              )
             }
           >
             {REFRESH_CADENCE_OPTIONS.map((option) => (
@@ -875,8 +1299,10 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
     t,
     language,
     settings,
+    updatePanelSettings,
     isRefreshing,
     refresh,
+    lastRefresh,
     sorted,
     trayScale,
     layoutReady,
@@ -886,19 +1312,59 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
     openMenuBarSettings,
     openFloatBarSettings,
     openAbout,
-    openPopOut,
+    closeFlyout,
     revealClassName,
   } = useTrayPanelController(state);
 
   const locale = languageTag(language);
   const [tab, setTab] = useState<TrayTabId>("quota");
+  const [expandedProviderId, setExpandedProviderId] = useState<string | null>(null);
+  const [historyProviderId, setHistoryProviderId] = useState<string | null>(null);
+  const [historyRange, setHistoryRange] = useState<HistoryRange>(7);
+  const [historyEvents, setHistoryEvents] = useState<TrayHistoryEvent[]>(() =>
+    readTrayHistory(),
+  );
+  const { spend, charts, appVersion } = useTrayDataCache(sorted, lastRefresh);
+  useEffect(() => {
+    if (sorted.length === 0) return;
+    setHistoryEvents(
+      updateTrayHistory(
+        sorted,
+        settings.highUsageThreshold,
+        settings.criticalUsageThreshold,
+      ),
+    );
+  }, [settings.criticalUsageThreshold, settings.highUsageThreshold, sorted]);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollPositionsRef = useRef<Record<TrayTabId, number>>({
+    quota: 0,
+    spend: 0,
+    history: 0,
+    settings: 0,
+  });
+  const selectTab = useCallback(
+    (next: TrayTabId) => {
+      if (next === tab) return;
+      if (scrollRef.current) {
+        scrollPositionsRef.current[tab] = scrollRef.current.scrollTop;
+      }
+      setTab(next);
+    },
+    [tab],
+  );
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollPositionsRef.current[tab];
+    }
+  }, [tab]);
   // Footer switcher: jump back to the quota list and bring that provider's
-  // card into view once the tab has rendered.
+  // expanded card into view once the tab has rendered.
   const [pendingFocus, setPendingFocus] = useState<string | null>(null);
   const focusProvider = useCallback((providerId: string) => {
-    setTab("quota");
+    selectTab("quota");
+    setExpandedProviderId(providerId);
     setPendingFocus(providerId);
-  }, []);
+  }, [selectTab]);
   useEffect(() => {
     if (!pendingFocus) return;
     const card = document.getElementById(quotaCardId(pendingFocus));
@@ -927,7 +1393,6 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
     return (
       <div className={`${revealClassName}${layoutReady ? "" : " tokencue-tray--measuring"}`}>
         <EmptyProviderPanel onConnect={openProviderSettings} scale={trayScale} />
-        <TrayResizeHandles />
       </div>
     );
   }
@@ -941,24 +1406,54 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
             key={provider.providerId}
             provider={provider}
             settings={settings}
+            chartData={charts.get(provider.providerId)}
+            expanded={expandedProviderId === provider.providerId}
+            onToggle={() =>
+              setExpandedProviderId((current) =>
+                current === provider.providerId ? null : provider.providerId,
+              )
+            }
             t={t}
-            onFix={openSettings}
+            onFix={openProviderSettings}
           />
         ))}
       </div>
     );
   } else if (tab === "spend") {
-    body = <SpendTab t={t} locale={locale} openSettings={openSettings} />;
+    body = (
+      <SpendTab
+        t={t}
+        locale={locale}
+        summary={spend.value}
+        loading={!spend.loaded}
+        refreshing={spend.refreshing}
+        openUsageSpend={openUsageSpend}
+      />
+    );
   } else if (tab === "history") {
     body = (
-      <HistoryTab providers={sorted} settings={settings} t={t} locale={locale} />
+      <HistoryTab
+        providers={sorted}
+        settings={settings}
+        t={t}
+        locale={locale}
+        charts={charts}
+        chartProviderId={historyProviderId}
+        onChartProviderChange={setHistoryProviderId}
+        range={historyRange}
+        onRangeChange={setHistoryRange}
+        historyEvents={historyEvents}
+      />
     );
   } else {
     body = (
       <SettingsTab
         settings={settings}
+        appVersion={appVersion}
         t={t}
+        updatePanelSettings={updatePanelSettings}
         openSettings={openSettings}
+        openProviderSettings={openProviderSettings}
         openUsageSpend={openUsageSpend}
         openMenuBarSettings={openMenuBarSettings}
         openFloatBarSettings={openFloatBarSettings}
@@ -974,9 +1469,15 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
         style={{ "--tray-scale": trayScale } as CSSProperties}
       >
         <header className="tokencue-tray__header">
-          <div className="tokencue-tray__traffic" aria-hidden>
-            <span />
-            <span />
+          <div className="tokencue-tray__traffic">
+            <button
+              type="button"
+              className="tokencue-tray__traffic-close"
+              aria-label={t("WindowClose")}
+              title={t("WindowClose")}
+              onClick={closeFlyout}
+            />
+            <span aria-hidden />
           </div>
           <div className="tokencue-tray__brand">
             <BrandMark className="tokencue-tray__logo" size={22} />
@@ -990,9 +1491,11 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
               key={item.id}
               type="button"
               role="tab"
+              id={`tokencue-tab-${item.id}`}
+              aria-controls={`tokencue-panel-${item.id}`}
               aria-selected={tab === item.id}
               className={`tokencue-tray__tab${tab === item.id ? " is-active" : ""}`}
-              onClick={() => setTab(item.id)}
+              onClick={() => selectTab(item.id)}
             >
               <TabIcon id={item.id} />
               <span>{t(item.labelKey)}</span>
@@ -1000,15 +1503,23 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
           ))}
         </nav>
 
-        <div className="tokencue-tray__scroll">{body}</div>
+        <div
+          ref={scrollRef}
+          className="tokencue-tray__scroll"
+          role="tabpanel"
+          id={`tokencue-panel-${tab}`}
+          aria-labelledby={`tokencue-tab-${tab}`}
+        >
+          {body}
+        </div>
 
         <footer className="tokencue-tray__footer">
           <button
             type="button"
             className="tokencue-tray__footer-btn"
-            aria-label={t("TrayPopOutDashboard")}
-            title={t("TrayPopOutDashboard")}
-            onClick={openPopOut}
+            aria-label={t("WindowClose")}
+            title={t("WindowClose")}
+            onClick={closeFlyout}
           >
             <svg
               width="16"
@@ -1077,47 +1588,6 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
           </button>
         </footer>
       </section>
-      <TrayResizeHandles />
     </div>
-  );
-}
-
-function TrayResizeHandles() {
-  return (
-    <>
-      <div
-        className="tray-resize tray-resize--top"
-        aria-hidden
-        onMouseDown={(event) => {
-          event.preventDefault();
-          void (async () => {
-            await beginFlyoutGesture().catch(() => {});
-            await getCurrentWindow().startResizeDragging("North");
-          })().catch(() => {});
-        }}
-      />
-      <div
-        className="tray-resize tray-resize--left"
-        aria-hidden
-        onMouseDown={(event) => {
-          event.preventDefault();
-          void (async () => {
-            await beginFlyoutGesture().catch(() => {});
-            await getCurrentWindow().startResizeDragging("West");
-          })().catch(() => {});
-        }}
-      />
-      <div
-        className="tray-resize tray-resize--topleft"
-        aria-hidden
-        onMouseDown={(event) => {
-          event.preventDefault();
-          void (async () => {
-            await beginFlyoutGesture().catch(() => {});
-            await getCurrentWindow().startResizeDragging("NorthWest");
-          })().catch(() => {});
-        }}
-      />
-    </>
   );
 }

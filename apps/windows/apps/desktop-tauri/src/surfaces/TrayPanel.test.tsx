@@ -7,7 +7,6 @@ const tauriMocks = vi.hoisted(() => ({
   refreshProvidersIfStale: vi.fn(),
   getSettingsSnapshot: vi.fn(),
   updateSettings: vi.fn(),
-  setSurfaceMode: vi.fn(),
   dismissTrayPanel: vi.fn(),
   beginFlyoutGesture: vi.fn(),
   endFlyoutGesture: vi.fn(),
@@ -207,6 +206,7 @@ describe("TokenCue handoff tray panel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     eventMocks.listeners.clear();
+    localStorage.removeItem("tokencue.tray-history.v1");
 
     currentWindowMocks.setSize.mockResolvedValue(undefined);
     currentWindowMocks.close.mockResolvedValue(undefined);
@@ -237,7 +237,9 @@ describe("TokenCue handoff tray panel", () => {
       target: { kind: "summary" },
     });
     tauriMocks.getSettingsSnapshot.mockResolvedValue(settings());
-    tauriMocks.updateSettings.mockResolvedValue(settings());
+    tauriMocks.updateSettings.mockImplementation(
+      async (patch: Partial<SettingsSnapshot>) => settings(patch),
+    );
     tauriMocks.getUsageSpendSummary.mockResolvedValue({
       rows: [],
       today: null,
@@ -262,8 +264,6 @@ describe("TokenCue handoff tray panel", () => {
         MenuQuit: "Quit TokenCue",
         MenuSettings: "Settings...",
         UsageSpendTitle: "Usage & Spend",
-        NoProvidersConfigured: "No providers configured",
-        OpenSettingsButton: "Open settings",
         DetailWindowSecondary: "Weekly",
         DetailWindowModelSpecific: "Model",
         DetailWindowTertiary: "Monthly",
@@ -301,10 +301,16 @@ describe("TokenCue handoff tray panel", () => {
         FloatBarSectionTitle: "Floating bar",
         ProviderEnabled: "Enabled",
         ProviderDisabled: "Disabled",
+        ProviderInfo: "Provider info",
+        ProviderSettingsTitle: "Provider settings",
         DisplayModeDetailed: "Detailed",
+        ShowNotifications: "Show notifications",
+        ShowNotificationsHelper: "Notify when usage crosses a threshold.",
+        ShowUsageAsUsed: "Show usage as used",
+        ShowUsageAsUsedHelper: "Show used percentage instead of remaining.",
         RefreshIntervalLabel: "Refresh interval",
         RefreshIntervalHelper: "How often providers refresh.",
-        TrayPopOutDashboard: "Pop out dashboard",
+        WindowClose: "Close",
       }),
     );
     eventMocks.listen.mockImplementation(
@@ -321,7 +327,7 @@ describe("TokenCue handoff tray panel", () => {
     vi.restoreAllMocks();
   });
 
-  it("reveals in its dedicated flyout and sizes the native window to 380px", async () => {
+  it("reveals in its dedicated flyout at the fixed 380x600 size", async () => {
     tauriMocks.getCurrentSurfaceState.mockResolvedValue({
       mode: "popOut",
       target: { kind: "dashboard" },
@@ -332,10 +338,21 @@ describe("TokenCue handoff tray panel", () => {
     await waitFor(() => {
       expect(container.querySelector(".tray-panel-reveal--ready")).not.toBeNull();
       expect(currentWindowMocks.setSize).toHaveBeenCalledWith(
-        expect.objectContaining({ width: 380 }),
+        expect.objectContaining({ width: 380, height: 600 }),
       );
       expect(tauriMocks.revealTrayPanelWindow).toHaveBeenCalled();
     });
+
+    const resizeCalls = currentWindowMocks.setSize.mock.calls.length;
+    fireEvent.click(screen.getByRole("tab", { name: "Spend" }));
+    await waitFor(() => {
+      expect(screen.getByRole("tab", { name: "Spend" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+    });
+    expect(currentWindowMocks.setSize).toHaveBeenCalledTimes(resizeCalls);
+    expect(container.querySelector(".tray-resize")).toBeNull();
   });
 
   it("dismisses only on an unmodified Escape", async () => {
@@ -351,6 +368,19 @@ describe("TokenCue handoff tray panel", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => {
       expect(tauriMocks.dismissTrayPanel).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("closes from both the titlebar control and footer without opening the retired PopOut surface", async () => {
+    renderTrayPanel([provider("claude", "Claude", 35)]);
+
+    const closeButtons = await screen.findAllByRole("button", { name: "Close" });
+    expect(closeButtons).toHaveLength(2);
+    fireEvent.click(closeButtons[0]);
+    fireEvent.click(closeButtons[1]);
+
+    await waitFor(() => {
+      expect(tauriMocks.dismissTrayPanel).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -504,6 +534,182 @@ describe("TokenCue handoff tray panel", () => {
     expect(await screen.findByText("Codex")).toBeInTheDocument();
   });
 
+  it("keeps spend, history, and app data cached across tab switches", async () => {
+    tauriMocks.getUsageSpendSummary.mockResolvedValue({
+      rows: [
+        {
+          providerId: "codex",
+          displayName: "Codex",
+          sevenDay: 4,
+          thirtyDay: 12,
+          currency: "USD",
+          source: "local logs",
+        },
+      ],
+      today: 1,
+      daily: [{ date: "2026-08-10", value: 1 }],
+    });
+    renderTrayPanel([provider("codex", "Codex", 40)]);
+
+    await waitFor(() => {
+      expect(tauriMocks.getUsageSpendSummary).toHaveBeenCalledTimes(1);
+      expect(tauriMocks.getProviderChartData).toHaveBeenCalledTimes(1);
+      expect(tauriMocks.getAppInfo).toHaveBeenCalledTimes(1);
+    });
+
+    for (const name of [/Spend/i, /Quota/i, /History/i, /Quota/i, /Settings/i, /Quota/i]) {
+      fireEvent.click(screen.getByRole("tab", { name }));
+    }
+
+    expect(tauriMocks.getUsageSpendSummary).toHaveBeenCalledTimes(1);
+    expect(tauriMocks.getProviderChartData).toHaveBeenCalledTimes(1);
+    expect(tauriMocks.getAppInfo).toHaveBeenCalledTimes(1);
+  });
+
+  it("retains the previous spend view while a background refresh is pending", async () => {
+    let resolveRefresh: ((value: unknown) => void) | undefined;
+    tauriMocks.getUsageSpendSummary
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            providerId: "codex",
+            displayName: "Codex",
+            sevenDay: 4,
+            thirtyDay: 12,
+            currency: "USD",
+            source: "local logs",
+          },
+        ],
+        today: 1,
+        daily: [],
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveRefresh = resolve;
+          }),
+      );
+    renderTrayPanel([provider("codex", "Codex", 40)]);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Spend/i }));
+    expect(await screen.findByText("$1.00")).toBeInTheDocument();
+
+    act(() => {
+      emitEvent("refresh-complete", { providerCount: 1, errorCount: 0 });
+    });
+    await waitFor(() => {
+      expect(tauriMocks.getUsageSpendSummary).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByText("$1.00")).toBeInTheDocument();
+    expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+
+    await act(async () => {
+      resolveRefresh?.({
+        rows: [
+          {
+            providerId: "codex",
+            displayName: "Codex",
+            sevenDay: 5,
+            thirtyDay: 15,
+            currency: "USD",
+            source: "local logs",
+          },
+        ],
+        today: 2,
+        daily: [],
+      });
+    });
+    expect(await screen.findByText("$2.00")).toBeInTheDocument();
+  });
+
+  it("routes provider repair and provider shortcuts to provider settings", async () => {
+    renderTrayPanel([
+      provider("copilot", "GitHub Copilot", 0, {
+        error: "Authentication required",
+      }),
+    ]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Fix" }));
+    await waitFor(() => {
+      expect(tauriMocks.openSettingsWindow).toHaveBeenCalledWith("providers");
+    });
+
+    tauriMocks.openSettingsWindow.mockClear();
+    fireEvent.click(screen.getByRole("tab", { name: /Settings/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /Providers/i }));
+    await waitFor(() => {
+      expect(tauriMocks.openSettingsWindow).toHaveBeenCalledWith("providers");
+    });
+  });
+
+  it("expands a quota card with complete windows, cost, local usage, and account data", async () => {
+    tauriMocks.getProviderChartData.mockResolvedValue({
+      providerId: "codex",
+      costHistory: [],
+      creditsHistory: [],
+      usageBreakdown: [],
+      localUsage: {
+        todayCost: 2.14,
+        thirtyDayCost: 31.2,
+        thirtyDayTokens: 4_700_000_000,
+        latestTokens: 75_300_000,
+        topModel: "gpt-5.6-sol",
+        estimateNote: "Estimated from local logs",
+        tokenCostUpdatedAtMs: 0,
+      },
+    });
+    renderTrayPanel([
+      provider("codex", "Codex", 40, {
+        primaryLabel: "Session",
+        secondary: rateWindow(55),
+        secondaryLabel: "Weekly",
+        modelSpecific: rateWindow(22),
+        tertiary: rateWindow(18),
+        extraRateWindows: [
+          { id: "review", title: "Code review", window: rateWindow(7) },
+        ],
+        cost: {
+          used: 12,
+          limit: 100,
+          remaining: 88,
+          currencyCode: "USD",
+          period: "Monthly",
+          resetsAt: null,
+          formattedUsed: "$12.00",
+          formattedLimit: "$100.00",
+        },
+        accountEmail: "developer@example.com",
+        accountOrganization: "Example Org",
+        sourceLabel: "Codex CLI",
+      }),
+    ]);
+
+    fireEvent.click(await screen.findByRole("button", { name: /Codex.*info/i }));
+
+    expect(await screen.findByText("Session")).toBeInTheDocument();
+    expect(screen.getByText("Weekly")).toBeInTheDocument();
+    expect(screen.getByText("Code review")).toBeInTheDocument();
+    expect(screen.getByText("developer@example.com · Example Org")).toBeInTheDocument();
+    expect(await screen.findByText("gpt-5.6-sol")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Provider settings/i })).toBeInTheDocument();
+  });
+
+  it("applies quick settings without remounting the settings tab", async () => {
+    renderTrayPanel([provider("codex", "Codex", 40)]);
+    fireEvent.click(await screen.findByRole("tab", { name: /Settings/i }));
+    const notifications = await screen.findByRole("checkbox", {
+      name: "Show notifications",
+    });
+    fireEvent.click(notifications);
+
+    await waitFor(() => {
+      expect(tauriMocks.updateSettings).toHaveBeenCalledWith({
+        showNotifications: false,
+      });
+      expect(notifications).not.toBeChecked();
+    });
+  });
+
   it("marks snapshots stale while retaining their last successful data", async () => {
     const { container } = renderTrayPanel([
       provider("codex", "Codex", 64, { updatedAt: "2020-01-01T00:00:00Z" }),
@@ -633,7 +839,7 @@ describe("TokenCue handoff tray panel", () => {
     expect(tauriMocks.reanchorTrayPanel).not.toHaveBeenCalled();
   });
 
-  it("reserves the handoff width without imposing the legacy dense height", async () => {
+  it("keeps a dense catalog inside the same fixed tray height", async () => {
     const denseProviders = TEST_PROVIDER_CATALOG.slice(0, 36).map(
       ([id, displayName]) => provider(id, displayName),
     );
@@ -644,7 +850,7 @@ describe("TokenCue handoff tray panel", () => {
 
     await waitFor(() => {
       expect(currentWindowMocks.setSize).toHaveBeenCalledWith(
-        expect.objectContaining({ width: 380, height: 120 }),
+        expect.objectContaining({ width: 380, height: 600 }),
       );
     });
   });

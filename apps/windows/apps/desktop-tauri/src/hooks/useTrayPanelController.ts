@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { BootstrapState, ProviderUsageSnapshot } from "../types/bridge";
+import type { BootstrapState } from "../types/bridge";
 import {
   beginFlyoutGesture,
   dismissTrayPanel,
   endFlyoutGesture,
-  flyoutStoredSize,
   openSettingsWindow,
   quitApp as quitApplication,
   reorderProviders,
-  setFlyoutSize,
-  setSurfaceMode,
   updateSettings,
 } from "../lib/tauri";
 import { useProviders } from "./useProviders";
@@ -18,7 +15,6 @@ import { useSettings } from "./useSettings";
 import { useLocale } from "./useLocale";
 import { useSurfaceTarget } from "./useSurfaceMode";
 import { useTrayPanelLayout } from "./useTrayPanelLayout";
-import type { MenuFooterRow } from "../components/MenuSurface";
 import { orderProviderSnapshots } from "../lib/providerOrder";
 import {
   hydrateProviderSlots,
@@ -29,9 +25,7 @@ const TRAY_INITIAL_REFRESH_DELAY_MS = 250;
 const DENSE_OVERVIEW_THRESHOLD = 32;
 
 // ── Tray flyout zoom (footer slider, above Refresh) ───────────────────
-// PopOut window mode has its own independent windowScalePercent (webview
-// setZoom) — this is a separate setting/control for the tray flyout only,
-// applied via CSS `zoom` on the MenuSurface root (see TrayPanel render).
+// The tray flyout scale is applied via CSS `zoom` on the panel root.
 export const TRAY_SCALE_MIN = 100;
 export const TRAY_SCALE_MAX = 200;
 export const TRAY_SCALE_STEP = 5;
@@ -49,12 +43,13 @@ function clampTrayScalePercent(value: number): number {
  * handlers. JSX stays in `TrayPanel`.
  */
 export function useTrayPanelController(state: BootstrapState) {
-  const { settings } = useSettings(state.settings);
+  const { settings, update: updatePanelSettings } = useSettings(state.settings);
   const {
     providers,
     isRefreshing,
     refreshingProviderIds,
     refresh,
+    lastRefresh,
     hasCachedData,
     hasLoadedCache,
   } = useProviders({
@@ -169,102 +164,11 @@ export function useTrayPanelController(state: BootstrapState) {
     return [match];
   }, [denseTrayProviders, sorted, selectedProviderId, gridExpanded]);
 
-  const layoutKey = useMemo(
-    () =>
-      [
-        selectedProviderId ?? "overview",
-        gridExpanded ? "expanded" : "collapsed",
-        isRefreshing ? "refreshing" : "idle",
-        expectsDenseOverview ? "dense" : "normal",
-        hasLoadedCache ? "cache-ready" : "cache-pending",
-        visibleProviders.map((provider) => provider.providerId).join(","),
-        trayScaleDraft,
-      ].join("|"),
-    [
-      selectedProviderId,
-      gridExpanded,
-      isRefreshing,
-      expectsDenseOverview,
-      hasLoadedCache,
-      visibleProviders,
-      trayScaleDraft,
-    ],
-  );
-
-  // Flyout sizing: auto-fit to content until the user manually drags the border,
-  // then remember + honor their size (position always re-anchors above the tray).
-  // `flyoutSize`: undefined = loading, null = auto-fit, [w,h] = user's fixed size.
-  const [flyoutSize, setFlyoutSizeState] = useState<
-    [number, number] | null | undefined
-  >(undefined);
-  const [autoFitKilled, setAutoFitKilled] = useState(false);
-  useEffect(() => {
-    let active = true;
-    void flyoutStoredSize()
-      .then((size) => {
-        if (active) setFlyoutSizeState(size);
-      })
-      .catch(() => {
-        if (active) setFlyoutSizeState(null);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const saveSizeTimerRef = useRef<number | undefined>(undefined);
-  const handleUserResize = useCallback((width: number, height: number) => {
-    // Stop auto-fit immediately so it can't fight the drag; commit the size
-    // (state + persistence) after the drag settles.
-    setAutoFitKilled(true);
-    if (saveSizeTimerRef.current !== undefined) {
-      window.clearTimeout(saveSizeTimerRef.current);
-    }
-    saveSizeTimerRef.current = window.setTimeout(() => {
-      setFlyoutSizeState([width, height]);
-      void setFlyoutSize(width, height).catch(() => {});
-    }, 300);
-  }, []);
-  useEffect(
-    () => () => {
-      if (saveSizeTimerRef.current !== undefined) {
-        window.clearTimeout(saveSizeTimerRef.current);
-      }
-    },
-    [],
-  );
-
-  // TrayPanel now renders exclusively inside its own dedicated "flyout" OS
-  // window (see App.tsx's isFlyoutWindow() routing) — it is no longer a
-  // state of the shared `main` window's surface-mode machine. The old
-  // `useSurfaceMode() === "trayPanel"` check would be permanently false
-  // here (that machine now only tracks Hidden/PopOut/Settings on `main`),
-  // which would silently gate off the fixed-size restore + reveal below
-  // (useTrayPanelLayout's `isOpen` gate) — a user-resized flyout would never
-  // reveal itself. Hardcoded true: being mounted IS "the flyout is open".
-  const isFlyoutOpen = true;
-  const fixedFlyoutSize = Array.isArray(flyoutSize) ? flyoutSize : null;
-  const useWideColumns =
-    selectedProviderId === null &&
-    fixedFlyoutSize !== null &&
-    fixedFlyoutSize[0] >= 640;
-  const wideColumns = useMemo(() => {
-    const columns: ProviderUsageSnapshot[][] = [[], []];
-    visibleProviders.forEach((provider, index) => {
-      columns[index % 2].push(provider);
-    });
-    return columns;
-  }, [visibleProviders]);
+  // The dedicated tray window now has one fixed height for every tab. The
+  // hook applies the native size once and leaves subsequent tab changes to
+  // scroll inside the content region.
   const { layoutReady, requestLayout } = useTrayPanelLayout({
     canMeasure: hasLoadedCache || sorted.length > 0,
-    denseOverview: expectsDenseOverview,
-    detailMode: selectedProviderId !== null,
-    layoutKey,
-    autoFit: flyoutSize === null && !autoFitKilled,
-    fixedSize: fixedFlyoutSize,
-    isOpen: isFlyoutOpen,
-    zoom: trayScale,
-    onUserResize: handleUserResize,
   });
 
   const openSettings = useCallback(() => {
@@ -277,8 +181,8 @@ export function useTrayPanelController(state: BootstrapState) {
       void getCurrentWindow().close();
     });
   }, []);
-  const openPopOut = useCallback(() => {
-    setSurfaceMode("popOut", { kind: "dashboard" });
+  const closeFlyout = useCallback(() => {
+    void dismissTrayPanel().catch(() => {});
   }, []);
   const openAbout = useCallback(() => {
     void openSettingsWindow("about").finally(() => {
@@ -304,17 +208,6 @@ export function useTrayPanelController(state: BootstrapState) {
   const quitApp = useCallback(() => {
     void quitApplication();
   }, []);
-
-  const headerActions = [
-    { icon: "⧉", title: t("TooltipPopOut"), onClick: openPopOut },
-  ];
-
-  const footerRows: MenuFooterRow[] = [
-    { icon: "↻", label: t("ActionRefresh"), shortcut: "Ctrl+R", onClick: refresh },
-    { icon: "⚙", label: t("MenuSettings"), shortcut: "Ctrl+,", onClick: openSettings },
-    { icon: "ⓘ", label: t("MenuAbout"), onClick: openAbout },
-    { icon: "⌧", label: t("MenuQuit"), shortcut: "Ctrl+Q", onClick: quitApp },
-  ];
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -366,15 +259,17 @@ export function useTrayPanelController(state: BootstrapState) {
     void endFlyoutGesture().catch(() => {});
   }, []);
 
-  const revealClassName = `tray-panel-reveal${layoutReady ? " tray-panel-reveal--ready" : ""}${expectsDenseOverview ? " tray-panel-reveal--dense" : ""}${fixedFlyoutSize ? " tray-panel-reveal--usersized" : ""}`;
+  const revealClassName = `tray-panel-reveal${layoutReady ? " tray-panel-reveal--ready" : ""}${expectsDenseOverview ? " tray-panel-reveal--dense" : ""}`;
 
   return {
     t,
     language,
     settings,
+    updatePanelSettings,
     isRefreshing,
     refreshingProviderIds,
     refresh,
+    lastRefresh,
     hasCachedData,
     trayScaleDraft,
     trayScale,
@@ -387,19 +282,15 @@ export function useTrayPanelController(state: BootstrapState) {
     gridExpanded,
     setGridExpanded,
     visibleProviders,
-    wideColumns,
-    useWideColumns,
     layoutReady,
     requestLayout,
-    headerActions,
-    footerRows,
     openSettings,
     openProviderSettings,
     openUsageSpend,
     openMenuBarSettings,
     openFloatBarSettings,
     openAbout,
-    openPopOut,
+    closeFlyout,
     quitApp,
     handleGridClick,
     handleReorder,
