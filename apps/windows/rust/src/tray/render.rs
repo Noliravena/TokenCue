@@ -15,7 +15,7 @@ pub const TRAY_ICON_SIZE: u32 = 32;
 /// - `session_percent`: primary usage (0–100)
 /// - `weekly_percent`: optional secondary usage. The most urgent value controls
 ///   the single glyph so the status remains legible at the real 16×16 tray size.
-/// - `has_error`: render the neutral four-bar glyph with the red incident badge.
+/// - `has_error`: render the stale-neutral four-bar glyph with the red incident badge.
 ///
 /// Returns `(rgba_bytes, width, height)` for a [`TRAY_ICON_SIZE`]×[`TRAY_ICON_SIZE`] icon.
 pub fn render_bar_icon_rgba(
@@ -50,7 +50,7 @@ pub fn render_bar_icon_rgba(
         ((effective_percent / 25.0).ceil() as usize).clamp(1, 4)
     };
     let (r, g, b) = if has_error {
-        UsageLevel::Low.color()
+        UsageLevel::Unknown.color()
     } else {
         UsageLevel::from_percent(effective_percent).color()
     };
@@ -223,33 +223,33 @@ mod tests {
     }
 
     #[test]
-    fn sixty_four_percent_matches_three_bar_neutral_handoff_state() {
+    fn sixty_four_percent_matches_three_bar_normal_warm_state() {
         let (rgba, w, _h) = render_bar_icon_rgba(64.0, None, false);
-        assert_eq!(pixel(&rgba, w, 2, 25), [185, 185, 190, 255]);
-        assert_eq!(pixel(&rgba, w, 11, 20), [185, 185, 190, 255]);
-        assert_eq!(pixel(&rgba, w, 20, 10), [185, 185, 190, 255]);
+        assert_eq!(pixel(&rgba, w, 2, 25), [110, 143, 90, 255]);
+        assert_eq!(pixel(&rgba, w, 11, 20), [110, 143, 90, 255]);
+        assert_eq!(pixel(&rgba, w, 20, 10), [110, 143, 90, 255]);
         assert_eq!(pixel(&rgba, w, 29, 25), [255, 255, 255, 46]);
     }
 
     #[test]
-    fn warning_and_critical_states_use_handoff_palette() {
+    fn warning_and_critical_states_use_warm_palette() {
         let (warning, w, _) = render_bar_icon_rgba(87.0, None, false);
-        assert_eq!(pixel(&warning, w, 29, 25), [224, 161, 58, 255]);
+        assert_eq!(pixel(&warning, w, 29, 25), [199, 143, 42, 255]);
 
         let (critical, w, _) = render_bar_icon_rgba(95.0, None, false);
-        assert_eq!(pixel(&critical, w, 29, 25), [217, 86, 79, 255]);
+        assert_eq!(pixel(&critical, w, 29, 25), [187, 74, 61, 255]);
     }
 
     #[test]
     fn higher_secondary_metric_controls_the_single_signal_glyph() {
         let (rgba, w, _) = render_bar_icon_rgba(30.0, Some(87.0), false);
-        assert_eq!(pixel(&rgba, w, 29, 25), [224, 161, 58, 255]);
+        assert_eq!(pixel(&rgba, w, 29, 25), [199, 143, 42, 255]);
     }
 
     #[test]
     fn error_state_uses_neutral_bars_and_red_incident_badge() {
         let (rgba, w, _) = render_bar_icon_rgba(10.0, None, true);
-        assert_eq!(pixel(&rgba, w, 11, 20), [185, 185, 190, 255]);
+        assert_eq!(pixel(&rgba, w, 11, 20), [162, 152, 138, 255]);
         assert_eq!(pixel(&rgba, w, 28, 4), [217, 86, 79, 255]);
     }
 

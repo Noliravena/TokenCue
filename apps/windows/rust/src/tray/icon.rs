@@ -5,14 +5,13 @@
 /// Usage status level for icon color
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum UsageLevel {
-    /// 0-70% used - neutral gray
+    /// 0-70% used - healthy/normal
     Low,
     /// 70-95% used - amber
     High,
     /// 95-100% used - red
     Critical,
-    /// Unknown/error state - gray
-    #[allow(dead_code)]
+    /// Unknown/error state - stale neutral
     Unknown,
 }
 
@@ -166,11 +165,10 @@ mod tests {
 
     #[test]
     fn test_usage_level_color() {
-        assert_eq!(UsageLevel::Low.color(), (185, 185, 190));
-        assert_eq!(UsageLevel::High.color(), (224, 161, 58));
-
-        let (r, g, b) = UsageLevel::Critical.color();
-        assert!(r > g && r > b); // Red should be dominant for critical
+        assert_eq!(UsageLevel::Low.color(), (110, 143, 90));
+        assert_eq!(UsageLevel::High.color(), (199, 143, 42));
+        assert_eq!(UsageLevel::Critical.color(), (187, 74, 61));
+        assert_eq!(UsageLevel::Unknown.color(), (162, 152, 138));
     }
 
     #[test]
