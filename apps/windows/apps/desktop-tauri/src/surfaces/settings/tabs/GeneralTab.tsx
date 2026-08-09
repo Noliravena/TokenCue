@@ -14,6 +14,11 @@ import type {
 } from "../../../types/bridge";
 import type { LocaleKey } from "../../../i18n/keys";
 import type { TabProps } from "../settingsTabs";
+import {
+  REFRESH_CADENCE_OPTIONS,
+  refreshCadencePatch,
+  refreshCadenceValue,
+} from "../refreshCadence";
 
 const FALLBACK_LANGUAGE_OPTIONS: LanguageOption[] = [
   { value: "english", display: "English" },
@@ -23,16 +28,6 @@ const FALLBACK_LANGUAGE_OPTIONS: LanguageOption[] = [
   { value: "korean", display: "한국어" },
   { value: "spanish", display: "Español" },
   { value: "russian", display: "Русский" },
-];
-
-const REFRESH_CADENCE_OPTIONS: { value: string; labelKey: LocaleKey }[] = [
-  { value: "0", labelKey: "RefreshIntervalManual" },
-  { value: "adaptive", labelKey: "RefreshIntervalAdaptive" },
-  { value: "60", labelKey: "RefreshInterval1Min" },
-  { value: "300", labelKey: "RefreshInterval5Min" },
-  { value: "900", labelKey: "RefreshInterval15Min" },
-  { value: "1800", labelKey: "RefreshInterval30Min" },
-  { value: "3600", labelKey: "RefreshInterval1Hour" },
 ];
 
 const NOTIFICATION_SOUND_THEME_OPTIONS: {
@@ -489,26 +484,13 @@ export default function GeneralTab({
             description={t("RefreshIntervalHelper")}
           >
             <Select
-              value={
-                settings.adaptiveRefresh
-                  ? "adaptive"
-                  : String(settings.refreshIntervalSecs)
-              }
+              value={refreshCadenceValue(settings)}
               disabled={saving}
               options={REFRESH_CADENCE_OPTIONS.map((o) => ({
                 value: o.value,
                 label: t(o.labelKey),
               }))}
-              onChange={(v) => {
-                if (v === "adaptive") {
-                  set({ adaptiveRefresh: true });
-                  return;
-                }
-                set({
-                  adaptiveRefresh: false,
-                  refreshIntervalSecs: Number(v),
-                });
-              }}
+              onChange={(v) => set(refreshCadencePatch(v))}
             />
           </Field>
           <Field

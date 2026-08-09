@@ -17,7 +17,7 @@ import AdvancedTab from "./settings/tabs/AdvancedTab";
 import AboutTab from "./settings/tabs/AboutTab";
 import ProvidersTab from "./settings/tabs/ProvidersTab";
 import UsageSpendTab from "./settings/tabs/UsageSpendTab";
-import tokencueIcon from "../assets/tokencue-icon.png";
+import { BrandMark } from "../components/BrandMark";
 
 // Inline monochrome SVG icons stand in for the upstream macOS SF Symbols
 // (gearshape / square.grid.2x2 / eye / slider.horizontal.3 / info.circle).
@@ -188,7 +188,7 @@ export default function Settings({ state, initialTab: propTab }: { state: Bootst
       {/* custom title bar (decorations disabled for guaranteed theme) */}
       <div className="settings-titlebar" data-tauri-drag-region>
         <span className="settings-titlebar__title" data-tauri-drag-region>
-          <img src={tokencueIcon} alt="" width={18} height={18} style={{ borderRadius: 5, objectFit: "cover" }} />
+          <BrandMark size={20} />
           {t("SettingsWindowTitle")}
         </span>
         <div className="settings-titlebar__controls">

@@ -61,7 +61,7 @@ export function useTrayPanelController(state: BootstrapState) {
     initialRefreshDelayMs: TRAY_INITIAL_REFRESH_DELAY_MS,
     forceRefreshOnMount: settings.refreshAllProvidersOnMenuOpen,
   });
-  const { t } = useLocale();
+  const { t, language } = useLocale();
   const surfaceTarget = useSurfaceTarget("trayPanel");
 
   // Zoom slider: LOCAL draft state drives both the thumb and the live CSS
@@ -285,6 +285,17 @@ export function useTrayPanelController(state: BootstrapState) {
       void getCurrentWindow().close();
     });
   }, []);
+  const openMenuBarSettings = useCallback(() => {
+    void openSettingsWindow("menuBar").finally(() => {
+      void getCurrentWindow().close();
+    });
+  }, []);
+  // The float bar controls live at the bottom of the Menu (panel) tab.
+  const openFloatBarSettings = useCallback(() => {
+    void openSettingsWindow("menu").finally(() => {
+      void getCurrentWindow().close();
+    });
+  }, []);
   const quitApp = useCallback(() => {
     void quitApplication();
   }, []);
@@ -354,6 +365,7 @@ export function useTrayPanelController(state: BootstrapState) {
 
   return {
     t,
+    language,
     settings,
     isRefreshing,
     refreshingProviderIds,
@@ -378,6 +390,10 @@ export function useTrayPanelController(state: BootstrapState) {
     footerRows,
     openSettings,
     openUsageSpend,
+    openMenuBarSettings,
+    openFloatBarSettings,
+    openAbout,
+    openPopOut,
     quitApp,
     handleGridClick,
     handleReorder,

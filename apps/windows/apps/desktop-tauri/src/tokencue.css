@@ -14,6 +14,9 @@
   --tb-tab-active-bg: #282319;
   --tb-chip-bg: #2a241c;
   --tb-footer-bg: #211d16;
+  --tb-table-head-bg: #221e17;
+  --tb-mark-track: rgba(242, 236, 224, 0.22);
+  --tb-mark-fill: #e08b58;
   --tb-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
   --app-bg: var(--tb-dark-canvas);
   --panel-bg: var(--tb-dark-surface);
@@ -39,6 +42,9 @@
   --tb-tab-active-bg: #f0e6cf;
   --tb-chip-bg: #f0e6cf;
   --tb-footer-bg: color-mix(in srgb, var(--tb-surface) 88%, #e6dcc6);
+  --tb-table-head-bg: #f8f1e2;
+  --tb-mark-track: rgba(43, 39, 33, 0.14);
+  --tb-mark-fill: #c2673a;
   --tb-shadow: 0 24px 60px rgba(58, 44, 25, 0.18);
   --app-bg: var(--tb-light-canvas);
   --panel-bg: var(--tb-light-surface);
@@ -136,10 +142,8 @@ select:focus-visible {
 }
 
 .tokencue-tray__logo {
-  width: 20px;
-  height: 20px;
-  border-radius: 6px;
-  object-fit: cover;
+  width: 22px;
+  height: 22px;
   display: block;
 }
 
@@ -387,6 +391,11 @@ select:focus-visible {
   color: var(--tb-text-secondary);
 }
 
+.tokencue-tray__display-num--multi {
+  font-size: 15px;
+  line-height: 1.25;
+}
+
 .tokencue-tray__spend-hero {
   display: flex;
   align-items: flex-end;
@@ -456,11 +465,20 @@ select:focus-visible {
 }
 
 .tokencue-tray__list-value {
-  width: 56px;
+  flex: none;
+  min-width: 56px;
   font-size: 14px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: right;
+  white-space: nowrap;
+}
+
+/* The 7d column is the first thing to give when a row runs out of room. */
+.tokencue-tray__list-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tokencue-tray__setting-row > span:first-child,
@@ -511,9 +529,57 @@ select:focus-visible {
   display: grid;
   place-items: center;
   border-radius: 9px;
-  color: #2b2721;
-  font-size: 12px;
-  font-weight: 700;
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+}
+
+.tokencue-tray__link-icon[data-tone="providers"] {
+  --tone-bg: #dfe7dc;
+  --tone-fg: #4d6b4a;
+}
+.tokencue-tray__link-icon[data-tone="menuBar"] {
+  --tone-bg: #e9e2ee;
+  --tone-fg: #6c5a86;
+}
+.tokencue-tray__link-icon[data-tone="floatBar"] {
+  --tone-bg: #f3e1d2;
+  --tone-fg: #b0552b;
+}
+.tokencue-tray__link-icon[data-tone="spend"] {
+  --tone-bg: #ece2cd;
+  --tone-fg: #8a6a2c;
+}
+.tokencue-tray__link-icon[data-tone="about"] {
+  --tone-bg: #dee6f0;
+  --tone-fg: #3f6690;
+}
+
+/* Dark theme keeps the same hues, but as low-lift tints on the warm ground. */
+:root[data-theme="dark"] .tokencue-tray__link-icon[data-tone="providers"] {
+  --tone-bg: #2b3329;
+  --tone-fg: #9ec192;
+}
+:root[data-theme="dark"] .tokencue-tray__link-icon[data-tone="menuBar"] {
+  --tone-bg: #322b39;
+  --tone-fg: #c0aada;
+}
+:root[data-theme="dark"] .tokencue-tray__link-icon[data-tone="floatBar"] {
+  --tone-bg: #3a2a20;
+  --tone-fg: #e0a077;
+}
+:root[data-theme="dark"] .tokencue-tray__link-icon[data-tone="spend"] {
+  --tone-bg: #35301f;
+  --tone-fg: #d8bd77;
+}
+:root[data-theme="dark"] .tokencue-tray__link-icon[data-tone="about"] {
+  --tone-bg: #24303d;
+  --tone-fg: #92b3d6;
+}
+
+.tokencue-tray__link-value {
+  flex: none;
+  color: var(--tb-muted);
+  font-size: 12.5px;
 }
 
 .tokencue-tray__chevron {
@@ -599,7 +665,7 @@ select:focus-visible {
   font-size: 12px;
 }
 
-.tokencue-tray__footer button {
+.tokencue-tray__footer-btn {
   display: grid;
   width: 30px;
   height: 30px;
@@ -612,8 +678,42 @@ select:focus-visible {
   color: var(--tb-text);
 }
 
-.tokencue-tray__footer button.is-refreshing {
-  animation: tokencue-tray-spin 900ms linear infinite;
+/* Refresh lives on the shortcut chip, so signal work with a pulse — a
+   spinning text label just reads as a rendering glitch. */
+.tokencue-tray__kbd.is-refreshing {
+  border-color: color-mix(in srgb, var(--tb-color-accent) 45%, transparent);
+  color: var(--tb-color-accent);
+  animation: tokencue-tray-pulse 900ms ease-in-out infinite;
+}
+
+/* Provider switcher: brand tiles that jump back to that quota card. */
+.tokencue-tray__switcher {
+  display: flex;
+  gap: 6px;
+  margin: 0 auto;
+}
+
+.tokencue-tray__switcher-btn {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 8px;
+  overflow: hidden;
+  transition: transform 120ms ease;
+}
+
+.tokencue-tray__switcher-btn:hover {
+  transform: translateY(-1px);
+}
+
+.tokencue-tray__switcher-btn .provider-icon {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tokencue-tray__switcher-btn .provider-icon svg {
+  filter: brightness(0) invert(1);
 }
 
 .tokencue-tray__updated {
@@ -626,6 +726,7 @@ select:focus-visible {
 }
 
 .tokencue-tray__kbd {
+  flex: none;
   padding: 4px 10px;
   border: 1px solid color-mix(in srgb, var(--tb-text) 12%, transparent);
   border-radius: 8px;
@@ -668,12 +769,13 @@ select:focus-visible {
   line-height: 1.55;
 }
 
-@keyframes tokencue-tray-spin {
-  to { transform: rotate(360deg); }
+@keyframes tokencue-tray-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tokencue-tray__footer button.is-refreshing {
+  .tokencue-tray__kbd.is-refreshing {
     animation: none;
   }
 }
@@ -709,6 +811,9 @@ select:focus-visible {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  /* The legacy rule hard-codes white for a #1e1e1e caption bar; the warm
+     titlebar is transparent over the panel, so it has to follow the theme. */
+  color: var(--tb-text);
   font-family: var(--tb-type-display-family);
   font-size: 18px;
   font-weight: 600;
@@ -723,6 +828,17 @@ select:focus-visible {
 
 .settings-titlebar__control {
   height: 48px;
+  color: var(--tb-text-secondary);
+}
+
+.settings-titlebar__control:hover {
+  background: color-mix(in srgb, var(--tb-text) 8%, transparent);
+  color: var(--tb-text);
+}
+
+.settings-titlebar__control--close:hover {
+  background: var(--tb-color-critical);
+  color: #fff;
 }
 
 .settings-tabs {
@@ -1139,50 +1255,70 @@ input.toggle:checked {
   flex-direction: column;
 }
 
+.provider-overview__panel {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  border: 1px solid var(--tb-border);
+  border-radius: var(--tb-card-radius);
+  background: var(--tb-surface-raised);
+  overflow: hidden;
+}
+
 .provider-overview__header {
-  display: grid;
-  grid-template-columns: minmax(160px, 1fr) 200px auto;
-  align-items: start;
+  display: flex;
+  align-items: center;
   gap: 12px;
-  padding: 4px 0 14px;
+  flex: none;
+  padding: 12px 17px;
   border-bottom: 1px solid var(--tb-border);
+  background: var(--tb-table-head-bg);
 }
 
-.provider-overview__header h2 {
-  margin: 0;
-  color: var(--tb-text);
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+.provider-overview__count {
+  color: var(--tb-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  font-variant-numeric: tabular-nums;
 }
 
-.provider-overview__header p {
-  margin: 12px 0 0;
-  color: #6b6b70;
-  font-size: 11.5px;
+.provider-overview__search {
+  margin-left: auto;
 }
 
 .provider-overview__search input {
-  width: 100%;
-  height: 30px;
-  padding: 0 10px;
-  border: 1px solid var(--tb-border);
-  border-radius: 5px;
-  background: var(--tb-surface-raised);
+  width: 190px;
+  height: 30px !important;
+  min-height: 30px !important;
+  padding: 0 12px !important;
+  border: 1px solid color-mix(in srgb, var(--tb-text) 12%, transparent) !important;
+  border-radius: 999px !important;
+  background: var(--tb-surface-raised) !important;
   color: var(--tb-text);
-  font-size: 12px;
+  font-size: 12.5px !important;
 }
 
 .provider-overview__add {
-  min-width: 84px;
+  min-width: 0;
   height: 30px;
-  padding: 0 14px;
-  border-radius: 5px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 999px;
   background: var(--tb-text);
   color: var(--tb-surface) !important;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
+}
+
+.provider-overview__hint {
+  flex: none;
+  margin: 12px 2px 0;
+  color: var(--tb-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
 }
 
 .provider-overview__list {
@@ -1195,24 +1331,47 @@ input.toggle:checked {
 
 .provider-overview__row {
   display: grid;
-  grid-template-columns: minmax(158px, 1fr) 74px minmax(116px, 160px) 34px 42px;
-  min-height: 62px;
+  grid-template-columns: minmax(150px, 1fr) 96px 78px minmax(112px, 150px) 34px 42px;
+  min-height: 56px;
   align-items: center;
-  gap: 10px;
-  padding: 8px 2px 8px 4px;
-  border-bottom: 1px solid var(--tb-border);
+  gap: 13px;
+  padding: 9px 17px;
+  border-bottom: 1px solid color-mix(in srgb, var(--tb-text) 6%, transparent);
+}
+
+.provider-overview__row:last-child {
+  border-bottom: 0;
 }
 
 .provider-overview__identity {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 0;
+  gap: 11px;
   padding: 0;
   border: 0;
   background: transparent;
   text-align: left;
   cursor: pointer;
+}
+
+.provider-overview__brand {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: none;
+  place-items: center;
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.provider-overview__brand .provider-icon {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.provider-overview__brand .provider-icon svg {
+  filter: brightness(0) invert(1);
 }
 
 .sr-only {
@@ -1237,21 +1396,32 @@ input.toggle:checked {
 .provider-overview__identity strong {
   overflow: hidden;
   color: var(--tb-text);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .provider-overview__identity small,
+.provider-overview__auth,
 .provider-overview__status,
 .provider-overview__metric {
   overflow: hidden;
-  color: #6b6b70;
-  font-size: 11.5px;
+  color: var(--tb-muted);
+  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.provider-overview__identity small {
+  font-family: var(--tb-type-mono-family);
+  font-size: 12px;
+}
+
+.provider-overview__auth,
+.provider-overview__status {
+  color: var(--tb-text-secondary);
 }
 
 .provider-overview__row[data-level="warning"] .provider-overview__metric {
@@ -1319,12 +1489,12 @@ input.toggle:checked {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #88888d;
+  background: var(--tb-surface-raised);
   transition: transform 120ms ease, background 120ms ease;
 }
 
 .provider-overview__toggle input:checked + span {
-  background: var(--tb-text);
+  background: var(--tb-color-accent);
 }
 
 .provider-overview__toggle input:checked + span::after {
@@ -1470,11 +1640,9 @@ input.toggle:checked {
 }
 
 .onboarding-hero-mark {
-  width: 56px;
-  height: 56px;
+  width: 64px;
+  height: 64px;
   margin-bottom: var(--tb-space-xl);
-  border-radius: 16px;
-  object-fit: cover;
 }
 
 .onboarding-eyebrow {
@@ -1798,4 +1966,291 @@ input.toggle:checked {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
   }
+}
+
+/* ── Brand mark ───────────────────────────────────────────────────── */
+.brand-mark {
+  display: block;
+  flex: none;
+}
+
+/* The mark is a flat glyph, not a rounded app tile — drop the legacy
+   `object-fit` / radius that the PNG icon needed. */
+.about-icon,
+.tokencue-tray__logo,
+.tokencue-tray__empty-icon,
+.onboarding-hero-mark {
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ── About: centred masthead per the warm handoff ─────────────────── */
+.about-section {
+  gap: 0 !important;
+  padding: 32px 40px 24px !important;
+}
+
+.about-icon {
+  width: 82px !important;
+  height: 82px !important;
+  margin-bottom: 20px;
+}
+
+.about-title {
+  font-family: var(--tb-type-display-family) !important;
+  font-size: 32px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.015em !important;
+}
+
+.about-version {
+  margin-top: 8px !important;
+  font-family: var(--tb-type-mono-family) !important;
+  font-size: 13px !important;
+  color: var(--tb-muted) !important;
+}
+
+.about-tagline {
+  max-width: 380px;
+  margin-top: 14px !important;
+  color: var(--tb-text-secondary) !important;
+  font-size: 14.5px !important;
+  line-height: 1.65 !important;
+  text-wrap: pretty;
+}
+
+.about-links {
+  gap: 10px !important;
+  margin-top: 24px !important;
+}
+
+.about-link {
+  height: 36px;
+  min-height: 36px !important;
+  padding: 0 18px !important;
+  border: 1px solid color-mix(in srgb, var(--tb-text) 12%, transparent) !important;
+  border-radius: 999px !important;
+  background: var(--tb-surface-raised) !important;
+  color: var(--tb-text) !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+
+.about-link:hover {
+  border-color: color-mix(in srgb, var(--tb-color-accent) 45%, transparent) !important;
+  background: color-mix(in srgb, var(--tb-color-accent) 8%, var(--tb-surface-raised)) !important;
+}
+
+.about-link--inline {
+  height: auto;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--tb-color-accent) !important;
+  font-weight: 500 !important;
+}
+
+.about-link--inline:hover {
+  background: transparent !important;
+  text-decoration: underline;
+}
+
+.about-divider {
+  width: 100%;
+  max-width: 420px;
+  margin: 28px 0 18px !important;
+  background: color-mix(in srgb, var(--tb-text) 10%, transparent);
+}
+
+.about-copyright {
+  color: var(--tb-muted) !important;
+  font-size: 12.5px !important;
+  line-height: 1.7 !important;
+}
+
+/* ── Tray: chart axis, inline selects, event timestamps ───────────── */
+.tokencue-tray__axis {
+  display: flex;
+  justify-content: space-between;
+  color: var(--tb-muted);
+  font-size: 11px;
+}
+
+.tokencue-tray__hint--inset {
+  margin: 0;
+  padding: 12px 15px;
+}
+
+/* Chips that are really selects: keep the pill, drop the native chrome. */
+.tokencue-tray__chip--select {
+  appearance: none;
+  height: 26px;
+  max-width: 132px;
+  padding: 0 22px 0 10px;
+  border: 1px solid color-mix(in srgb, var(--tb-text) 12%, transparent);
+  background-color: var(--tb-chip-bg);
+  background-image: linear-gradient(45deg, transparent 50%, var(--tb-muted) 50%),
+    linear-gradient(135deg, var(--tb-muted) 50%, transparent 50%);
+  background-position: calc(100% - 12px) calc(50% - 1px), calc(100% - 8px) calc(50% - 1px);
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  color: var(--tb-text-secondary);
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+
+.tokencue-tray__history-head .tokencue-tray__chip--select:first-of-type {
+  flex: 1;
+  min-width: 0;
+}
+
+.tokencue-tray__event-time {
+  flex: none;
+  color: var(--tb-muted);
+  font-size: 11.5px;
+}
+
+/* ── Settings → Menu bar: display-mode preview cards ──────────────── */
+.display-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.display-mode-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 15px 16px 16px;
+  border: 1px solid var(--tb-border);
+  border-radius: var(--tb-card-radius);
+  background: var(--tb-surface-raised);
+  color: var(--tb-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.display-mode-card:hover:not(.display-mode-card--active) {
+  border-color: color-mix(in srgb, var(--tb-text) 18%, transparent);
+}
+
+.display-mode-card--active {
+  border: 1.5px solid var(--tb-color-accent);
+  padding: 14.5px 15.5px 15.5px;
+}
+
+.display-mode-card:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.display-mode-card__name {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--tb-chip-bg);
+  color: var(--tb-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Sample render of the tray label this mode produces. */
+.display-mode-card__preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  background: var(--tb-footer-bg);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.display-mode-card__brand {
+  display: grid;
+  width: 15px;
+  height: 15px;
+  flex: none;
+  place-items: center;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.display-mode-card__brand .provider-icon {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.display-mode-card__brand .provider-icon svg {
+  filter: brightness(0) invert(1);
+}
+
+.display-mode-card__reset {
+  color: var(--tb-muted);
+  font-family: var(--tb-type-mono-family);
+  font-weight: 500;
+}
+
+.display-mode-card__desc {
+  color: var(--tb-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ── Settings → Usage & Spend: brand tile in the provider column ──── */
+.usage-spend-table__provider {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 10px;
+}
+
+.usage-spend-table__brand {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  place-items: center;
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.usage-spend-table__brand .provider-icon {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.usage-spend-table__brand .provider-icon svg {
+  filter: brightness(0) invert(1);
+}
+
+/* ── PopOut titlebar: same theme-follow fix as the Settings caption ─── */
+.popout-titlebar {
+  background: var(--tb-footer-bg);
+  border-bottom: 1px solid var(--tb-border);
+}
+
+.popout-titlebar__title {
+  color: var(--tb-text) !important;
+  font-family: var(--tb-type-display-family);
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+
+.popout-titlebar__control {
+  color: var(--tb-text-secondary) !important;
+}
+
+.popout-titlebar__control:hover {
+  background: color-mix(in srgb, var(--tb-text) 8%, transparent) !important;
+  color: var(--tb-text) !important;
+}
+
+.popout-titlebar__control--close:hover {
+  background: var(--tb-color-critical) !important;
+  color: #fff !important;
 }
