@@ -1,0 +1,45 @@
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+.idea/
+.vscode/
+node_modules/
+target/
+.build/
+DerivedData/
+dist/
+apps/windows/apps/desktop-tauri/src-tauri/target/
+apps/windows/rust/target/
+apps/macos/.build/
+design-qa-artifacts/
+.playwright-mcp/
+qa-*.png
+
+# Local design references, QA screenshots, and generated upstream reports are
+# not part of the public source distribution. Public design system docs live in
+# docs/design-system.md; import-pin policy lives in docs/upstream-policy.md.
+docs/design/handoff/
+docs/design/qa/
+docs/upstream/
+
+# Imported project-maintenance material is intentionally replaced by the
+# repository-level TokenCue documentation and GitHub workflows.
+apps/macos/.agents/
+apps/macos/.github/
+apps/macos/AGENTS.md
+apps/macos/CHANGELOG.md
+apps/macos/VISION.md
+apps/macos/bin/
+apps/macos/docs/
+apps/windows/.github/
+apps/windows/AGENTS.md
+apps/windows/CHANGELOG.md
+apps/windows/CONTEXT.md
+apps/windows/CONTRIBUTING.md
+apps/windows/README.*.md
+apps/windows/VERSIONING.md
+apps/windows/rust/CHANGELOG.md
+apps/windows/rust/README.md
+apps/windows/rust/screenshots/
+apps/windows/rust/wix/

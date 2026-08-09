@@ -1,0 +1,11 @@
+{
+  "name": "tokencue",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.18.1",
+  "scripts": {
+    "generate": "node scripts/generate-contracts.mjs && node scripts/sync-windows-locales.mjs && node scripts/normalize-branding.mjs",
+    "check": "node scripts/check-contracts.mjs && node scripts/check-secrets.mjs && node apps/windows/apps/desktop-tauri/scripts/check-locale-drift.mjs && node apps/macos/Scripts/check-app-locales.mjs --test && node apps/macos/Scripts/check-app-locales.mjs",
+    "upstream:report": "node scripts/report-provider-parity.mjs"
+  }
+}
