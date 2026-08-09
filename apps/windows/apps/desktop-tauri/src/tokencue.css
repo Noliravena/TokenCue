@@ -769,6 +769,127 @@ select:focus-visible {
   line-height: 1.55;
 }
 
+/* The redesigned first-run experience is the tray's real empty state. */
+.tokencue-empty-panel {
+  display: flex;
+  width: min(var(--tb-tray-width), 100vw);
+  height: min(560px, 100vh);
+  max-height: 100vh;
+  box-sizing: border-box;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: var(--tb-tray-radius);
+  background: var(--tb-surface);
+  color: var(--tb-text);
+  box-shadow: var(--tb-shadow), 0 0 0 1px color-mix(in srgb, var(--tb-text) 7%, transparent);
+  font-family: var(--tb-type-windows-family);
+  zoom: var(--tray-scale, 1);
+}
+
+.tokencue-empty-panel__header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 18px 12px;
+}
+
+.tokencue-empty-panel__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tokencue-empty-panel__brand strong {
+  font-family: var(--tb-type-display-family);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.tokencue-empty-panel__body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 40px;
+  text-align: center;
+}
+
+.tokencue-empty-panel__mark {
+  width: 60px;
+  height: 60px;
+  margin-bottom: 18px;
+}
+
+.tokencue-empty-panel__body h1 {
+  margin: 0;
+  font-family: var(--tb-type-display-family);
+  font-size: 27px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+
+.tokencue-empty-panel__body p {
+  margin: 8px 0 0;
+  color: var(--tb-text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+  text-wrap: pretty;
+}
+
+.tokencue-empty-panel__action {
+  display: flex;
+  flex: none;
+  justify-content: center;
+  padding: 0 40px 34px;
+}
+
+.tokencue-empty-panel__action button {
+  padding: 12px 22px;
+  border: 1px solid color-mix(in srgb, var(--tb-text) 12%, transparent);
+  border-radius: 999px;
+  background: var(--tb-surface-raised);
+  color: var(--tb-text);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--tb-text) 6%, transparent);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tokencue-empty-panel__action button:hover {
+  border-color: color-mix(in srgb, var(--tb-color-accent) 40%, transparent);
+  color: var(--tb-color-accent);
+}
+
+.tokencue-empty-panel__footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-top: 1px solid color-mix(in srgb, var(--tb-text) 7%, transparent);
+  background: var(--tb-footer-bg);
+  color: var(--tb-muted);
+  font-size: 12px;
+}
+
+.tokencue-empty-panel__footer kbd {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, var(--tb-text) 12%, transparent);
+  border-radius: 8px;
+  background: var(--tb-surface-raised);
+  color: var(--tb-text-secondary);
+  font-family: var(--tb-type-mono-family);
+  font-size: 11px;
+  font-weight: 400;
+}
+
 @keyframes tokencue-tray-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.45; }
@@ -1582,9 +1703,9 @@ input.toggle:checked {
 .onboarding-shell {
   width: 100vw;
   height: 100vh;
-  min-height: 620px;
+  min-height: 0;
   display: grid;
-  place-items: stretch;
+  place-items: center;
   overflow: hidden;
   background: var(--tb-canvas);
   color: var(--tb-text);

@@ -272,6 +272,11 @@ export function useTrayPanelController(state: BootstrapState) {
       void getCurrentWindow().close();
     });
   }, []);
+  const openProviderSettings = useCallback(() => {
+    void openSettingsWindow("providers").finally(() => {
+      void getCurrentWindow().close();
+    });
+  }, []);
   const openPopOut = useCallback(() => {
     setSurfaceMode("popOut", { kind: "dashboard" });
   }, []);
@@ -389,6 +394,7 @@ export function useTrayPanelController(state: BootstrapState) {
     headerActions,
     footerRows,
     openSettings,
+    openProviderSettings,
     openUsageSpend,
     openMenuBarSettings,
     openFloatBarSettings,

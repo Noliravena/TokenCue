@@ -37,6 +37,7 @@ import { getProviderIcon } from "../components/providers/providerIcons";
 import { Toggle } from "../components/FormControls";
 import type { LocaleKey } from "../i18n/keys";
 import { BrandMark } from "../components/BrandMark";
+import { EmptyProviderPanel } from "../components/EmptyProviderPanel";
 
 type Translate = (key: LocaleKey) => string;
 type TrayTabId = "quota" | "spend" | "history" | "settings";
@@ -880,12 +881,12 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
     trayScale,
     layoutReady,
     openSettings,
+    openProviderSettings,
     openUsageSpend,
     openMenuBarSettings,
     openFloatBarSettings,
     openAbout,
     openPopOut,
-    quitApp,
     revealClassName,
   } = useTrayPanelController(state);
 
@@ -922,19 +923,17 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
     { id: "settings", labelKey: "TrayTabSettings" },
   ];
 
-  let body: ReactNode;
-  if (sorted.length === 0 && tab === "quota") {
-    body = (
-      <div className="tokencue-tray__empty">
-        <BrandMark className="tokencue-tray__empty-icon" size={60} />
-        <h2>{t("TrayEmptyTitle")}</h2>
-        <p>{t("NoProvidersConfigured")}</p>
-        <button type="button" className="tokencue-tray__cta" onClick={openSettings}>
-          {t("TrayEmptyConnect")}
-        </button>
+  if (sorted.length === 0) {
+    return (
+      <div className={`${revealClassName}${layoutReady ? "" : " tokencue-tray--measuring"}`}>
+        <EmptyProviderPanel onConnect={openProviderSettings} scale={trayScale} />
+        <TrayResizeHandles />
       </div>
     );
-  } else if (tab === "quota") {
+  }
+
+  let body: ReactNode;
+  if (tab === "quota") {
     body = (
       <div className="tokencue-tray__body">
         {sorted.map((provider) => (
@@ -1057,9 +1056,9 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
           <button
             type="button"
             className="tokencue-tray__footer-btn"
-            aria-label={t("MenuQuit")}
-            title={t("MenuQuit")}
-            onClick={quitApp}
+            aria-label={t("TrayOpenFullSettings")}
+            title={t("TrayOpenFullSettings")}
+            onClick={openSettings}
           >
             <svg
               width="16"
@@ -1071,8 +1070,9 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
               strokeLinecap="round"
               aria-hidden
             >
-              <path d="M8 2.5v5.5" />
-              <path d="M11.9 4.4a5 5 0 1 1-7.8 0" />
+              <path d="M2.5 5h11M2.5 11h11" />
+              <circle cx="10" cy="5" r="1.7" fill="var(--tb-footer-bg)" />
+              <circle cx="5.5" cy="11" r="1.7" fill="var(--tb-footer-bg)" />
             </svg>
           </button>
         </footer>

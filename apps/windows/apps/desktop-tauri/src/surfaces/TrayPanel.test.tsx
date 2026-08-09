@@ -274,7 +274,9 @@ describe("TokenCue handoff tray panel", () => {
         TrayTabHistory: "History",
         TrayTabSettings: "Settings",
         TrayEmptyTitle: "No providers connected",
+        TrayEmptyDescription: "Connect an account and its quota, reset time, and spend will appear here together.",
         TrayEmptyConnect: "Connect a provider →",
+        TrayLocalPrivacy: "Processed locally · no credentials uploaded",
         TrayCurrentAlerts: "Current alerts",
         TrayNoCurrentAlerts: "No current alerts.",
         TrayOpenFullSettings: "Open full settings",
@@ -513,7 +515,7 @@ describe("TokenCue handoff tray panel", () => {
     expect(container.querySelector(".tokencue-tray__card-pct-num")?.textContent).toContain("64");
   });
 
-  it("opens Settings and Quit from the tray settings tab and footer", async () => {
+  it("opens Settings from the redesigned footer and keeps Ctrl+Q quit", async () => {
     renderTrayPanel([provider("codex", "Codex", 64)]);
 
     fireEvent.click(await screen.findByRole("tab", { name: /Settings/i }));
@@ -522,7 +524,13 @@ describe("TokenCue handoff tray panel", () => {
       expect(tauriMocks.openSettingsWindow).toHaveBeenCalledWith("general");
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Quit TokenCue" }));
+    const settingsButtons = screen.getAllByRole("button", { name: "Open full settings" });
+    fireEvent.click(settingsButtons[settingsButtons.length - 1]);
+    await waitFor(() => {
+      expect(tauriMocks.openSettingsWindow).toHaveBeenCalledTimes(2);
+    });
+
+    fireEvent.keyDown(window, { key: "q", ctrlKey: true });
     expect(tauriMocks.quitApp).toHaveBeenCalledTimes(1);
   });
 
@@ -598,9 +606,11 @@ describe("TokenCue handoff tray panel", () => {
     renderTrayPanel([], { enabledProviders: [] });
 
     expect(await screen.findByText("No providers connected")).toBeInTheDocument();
+    expect(screen.getByText("Processed locally · no credentials uploaded")).toBeInTheDocument();
+    expect(screen.queryByRole("tablist")).not.toBeInTheDocument();
     fireEvent.click(screen.getByText("Connect a provider →"));
     await waitFor(() => {
-      expect(tauriMocks.openSettingsWindow).toHaveBeenCalledWith("general");
+      expect(tauriMocks.openSettingsWindow).toHaveBeenCalledWith("providers");
     });
   });
 
