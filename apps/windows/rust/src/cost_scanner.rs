@@ -840,9 +840,9 @@ fn add_claude_record_to_summary(summary: &mut CostSummary, record: &ClaudeUsageR
 fn add_claude_record_to_daily_costs(
     daily_costs: &mut HashMap<String, f64>,
     record: &ClaudeUsageRecord,
-) {
+) -> bool {
     let Some(timestamp) = record.timestamp else {
-        return;
+        return false;
     };
     let date_str = timestamp
         .with_timezone(&Local)
@@ -851,7 +851,12 @@ fn add_claude_record_to_daily_costs(
         .to_string();
     if let Some(cost) = daily_costs.get_mut(&date_str) {
         *cost += record.cost;
+        return record.input > 0
+            || record.output > 0
+            || record.cache_create > 0
+            || record.cache_read > 0;
     }
+    false
 }
 
 /// Check if any cost usage sources are available
@@ -868,12 +873,23 @@ pub fn has_cost_usage_sources() -> bool {
             .any(|dir| dir.exists())
 }
 
-/// Get daily cost history for the last N days
-/// Returns Vec of (date_string, cost_usd) sorted by date
-pub fn get_daily_cost_history(provider: &str, days: u32) -> Vec<(String, f64)> {
+/// Daily cost points plus whether at least one usage record was observed.
+///
+/// Keeping availability separate from the numeric totals lets callers
+/// distinguish "no local data" from a real zero-spend day.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct DailyCostHistory {
+    pub points: Vec<(String, f64)>,
+    pub has_data: bool,
+}
+
+/// Get daily cost history for the last N days together with source
+/// availability. Points are sorted by local calendar date.
+pub fn get_daily_cost_history_with_availability(provider: &str, days: u32) -> DailyCostHistory {
     let scanner = CostScanner::new(days);
     let today = Local::now().date_naive();
     let mut daily_costs: HashMap<String, f64> = HashMap::new();
+    let mut has_data = false;
 
     // Initialize all days with 0
     for days_ago in 0..days {
@@ -891,6 +907,9 @@ pub fn get_daily_cost_history(provider: &str, days: u32) -> Vec<(String, f64)> {
                 let Some(slot) = daily_costs.get_mut(day_key) else {
                     continue;
                 };
+                has_data |= models
+                    .values()
+                    .any(|packed| packed.iter().any(|value| *value > 0));
                 let Some(day) = CostUsageDayRange::parse_day_key(day_key) else {
                     continue;
                 };
@@ -911,7 +930,7 @@ pub fn get_daily_cost_history(provider: &str, days: u32) -> Vec<(String, f64)> {
                 let mut seen = HashSet::new();
                 let mut handle_file = |path: &Path| {
                     for_each_claude_usage_record(path, &cutoff, &mut seen, None, |record| {
-                        add_claude_record_to_daily_costs(&mut daily_costs, record);
+                        has_data |= add_claude_record_to_daily_costs(&mut daily_costs, record);
                     });
                 };
                 scanner.walk_claude_files(&projects_dir, &cutoff, None, &mut handle_file);
@@ -923,7 +942,16 @@ pub fn get_daily_cost_history(provider: &str, days: u32) -> Vec<(String, f64)> {
     // Convert to sorted vector
     let mut result: Vec<(String, f64)> = daily_costs.into_iter().collect();
     result.sort_by(|a, b| a.0.cmp(&b.0));
-    result
+    DailyCostHistory {
+        points: result,
+        has_data,
+    }
+}
+
+/// Get daily cost history for the last N days.
+/// Returns Vec of (date_string, cost_usd) sorted by date.
+pub fn get_daily_cost_history(provider: &str, days: u32) -> Vec<(String, f64)> {
+    get_daily_cost_history_with_availability(provider, days).points
 }
 
 #[cfg(test)]
