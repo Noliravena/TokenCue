@@ -41,20 +41,11 @@ function authSummary(providerId: string) {
     .join(" · ");
 }
 
-function statusLabelKey(
-  enabled: boolean,
-  snapshot: ProviderUsageSnapshot | null,
-): LocaleKey {
-  if (!enabled) return "ProviderStatusNotConfigured";
-  if (!snapshot) return "ProviderStatusWaiting";
-  if (snapshot.error) return "ProviderStatusNeedsAttention";
-  return "ProviderStatusConnected";
-}
-
 function ProviderOverviewRow({
   provider,
   snapshot,
   enabled,
+  showAsUsed,
   resetTimeRelative,
   disabled,
   canMoveUp,
@@ -67,6 +58,7 @@ function ProviderOverviewRow({
   provider: ProviderCatalogEntry;
   snapshot: ProviderUsageSnapshot | null;
   enabled: boolean;
+  showAsUsed: boolean;
   resetTimeRelative: boolean;
   disabled: boolean;
   canMoveUp: boolean;
@@ -81,9 +73,21 @@ function ProviderOverviewRow({
     snapshot?.primary.resetDescription ?? null,
     resetTimeRelative,
   );
-  const percent = snapshot && Number.isFinite(snapshot.primary.usedPercent)
-    ? `${Math.round(Math.max(0, snapshot.primary.usedPercent))}%`
-    : "—";
+  const usedPercent = snapshot && Number.isFinite(snapshot.primary.usedPercent)
+    ? Math.max(0, Math.min(100, snapshot.primary.usedPercent))
+    : null;
+  const displayPercent = usedPercent == null
+    ? null
+    : showAsUsed
+      ? usedPercent
+      : 100 - usedPercent;
+  const metric = !enabled
+    ? t("ProviderStatusNotConfigured")
+    : snapshot?.error
+      ? snapshot.error
+      : snapshot == null || displayPercent == null
+        ? t("ProviderStatusWaiting")
+        : `${Math.round(displayPercent)}% ${t(showAsUsed ? "PanelUsedSuffix" : "PanelLeftSuffix")}${reset ? ` · ${reset}` : ""}`;
   const level = snapshot?.error
     ? "error"
     : (snapshot?.primary.usedPercent ?? 0) >= 95
@@ -111,12 +115,7 @@ function ProviderOverviewRow({
         </span>
       </button>
       <span className="provider-overview__auth">{authSummary(provider.id)}</span>
-      <span className="provider-overview__status">
-        {t(statusLabelKey(enabled, snapshot))}
-      </span>
-      <span className="provider-overview__metric">
-        {snapshot?.error ? snapshot.error : `${percent}${reset ? ` · ${reset}` : ""}`}
-      </span>
+      <span className="provider-overview__metric">{metric}</span>
       <span className="provider-overview__reorder">
         <button
           type="button"
@@ -292,6 +291,7 @@ export default function ProvidersTab({
               provider={provider}
               snapshot={snapshotsById.get(provider.id) ?? null}
               enabled={enabled.has(provider.id)}
+              showAsUsed={settings.showAsUsed}
               resetTimeRelative={settings.resetTimeRelative}
               disabled={saving}
               canMoveUp={index > 0}

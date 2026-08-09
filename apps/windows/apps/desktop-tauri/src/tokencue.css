@@ -1452,7 +1452,7 @@ input.toggle:checked {
 
 .provider-overview__row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 96px 78px minmax(112px, 150px) 34px 42px;
+  grid-template-columns: minmax(190px, 1fr) 110px minmax(150px, 170px) 34px 42px;
   min-height: 56px;
   align-items: center;
   gap: 13px;
@@ -1525,7 +1525,6 @@ input.toggle:checked {
 
 .provider-overview__identity small,
 .provider-overview__auth,
-.provider-overview__status,
 .provider-overview__metric {
   overflow: hidden;
   color: var(--tb-muted);
@@ -1540,8 +1539,7 @@ input.toggle:checked {
   font-size: 12px;
 }
 
-.provider-overview__auth,
-.provider-overview__status {
+.provider-overview__auth {
   color: var(--tb-text-secondary);
 }
 
@@ -1550,7 +1548,7 @@ input.toggle:checked {
 }
 
 .provider-overview__row[data-level="critical"] .provider-overview__metric,
-.provider-overview__row[data-level="error"] .provider-overview__status {
+.provider-overview__row[data-level="error"] .provider-overview__metric {
   color: var(--tb-color-critical);
 }
 
