@@ -1,15 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { formatChartDay, formatEventTime } from "./eventTime";
 
-const NOW = Date.parse("2026-08-09T14:30:00Z");
+const NOW = new Date(2026, 7, 9, 14, 30).getTime();
 
 describe("formatEventTime", () => {
   it("renders a 24h clock for events from today", () => {
-    expect(formatEventTime("2026-08-09T09:42:00Z", NOW, "en-US")).toBe("09:42");
+    const localEvent = new Date(2026, 7, 9, 9, 42).toISOString();
+    expect(formatEventTime(localEvent, NOW, "en-US")).toBe("09:42");
   });
 
   it("renders a short date for older events", () => {
-    expect(formatEventTime("2026-08-03T09:42:00Z", NOW, "en-US")).toBe("Aug 3");
+    const localEvent = new Date(2026, 7, 3, 9, 42).toISOString();
+    expect(formatEventTime(localEvent, NOW, "en-US")).toBe("Aug 3");
   });
 
   it("falls back to a dash for missing or unparseable stamps", () => {
