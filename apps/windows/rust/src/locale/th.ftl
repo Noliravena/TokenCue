@@ -755,11 +755,10 @@ TrayTabHistory = History
 TrayTabSettings = Settings
 TrayEmptyTitle = No providers connected
 TrayEmptyConnect = Connect a provider →
-TrayRecentEvents = Recent events
+TrayCurrentAlerts = Current alerts
 TrayOpenFullSettings = Open full settings
 TrayTodayLabel = วันนี้
 TrayLast30DaysLabel = 30 วันที่ผ่านมา
 TrayUpdatedAgo = อัพเดท
 TrayFixProvider = Fix
 TraySpendDisclaimer = Amounts are local estimates; bills from providers may differ.
-

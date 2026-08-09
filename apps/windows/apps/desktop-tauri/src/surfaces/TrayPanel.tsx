@@ -559,7 +559,9 @@ function HistoryTab({
     };
   }, [activeId]);
 
-  const events = useMemo(() => {
+  // These are current alerts derived from the latest snapshots, not a
+  // persisted event ledger. Keep the UI language honest about that scope.
+  const alerts = useMemo(() => {
     const rows: Array<{
       title: string;
       detail: string;
@@ -685,14 +687,14 @@ function HistoryTab({
         </article>
       ) : null}
 
-      <p className="tokencue-tray__eyebrow">{t("TrayRecentEvents")}</p>
+      <p className="tokencue-tray__eyebrow">{t("TrayCurrentAlerts")}</p>
       <article className="tokencue-tray__card tokencue-tray__card--list">
-        {events.length === 0 ? (
+        {alerts.length === 0 ? (
           <p className="tokencue-tray__hint tokencue-tray__hint--inset">
-            {t("UsageSpendEmpty")}
+            {t("TrayNoCurrentAlerts")}
           </p>
         ) : (
-          events.map((event, index) => (
+          alerts.map((event, index) => (
             <div key={`${event.title}-${index}`} className="tokencue-tray__event">
               <span className="tokencue-tray__event-dot" data-tone={event.tone} />
               <span className="tokencue-tray__event-copy">

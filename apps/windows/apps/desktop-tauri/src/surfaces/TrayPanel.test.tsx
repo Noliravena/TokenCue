@@ -275,7 +275,8 @@ describe("TokenCue handoff tray panel", () => {
         TrayTabSettings: "Settings",
         TrayEmptyTitle: "No providers connected",
         TrayEmptyConnect: "Connect a provider →",
-        TrayRecentEvents: "Recent events",
+        TrayCurrentAlerts: "Current alerts",
+        TrayNoCurrentAlerts: "No current alerts.",
         TrayOpenFullSettings: "Open full settings",
         TrayTodayLabel: "Today",
         TrayLast30DaysLabel: "Last 30 days",
@@ -558,6 +559,16 @@ describe("TokenCue handoff tray panel", () => {
     );
     expect(thirtyDay?.textContent).toContain("31.20");
     expect(thirtyDay?.textContent).toContain("128.20");
+  });
+
+  it("labels snapshot-derived history rows as current alerts", async () => {
+    renderTrayPanel([provider("codex", "Codex", 40)]);
+
+    fireEvent.click(await screen.findByRole("tab", { name: /History/i }));
+
+    expect(await screen.findByText("Current alerts")).toBeInTheDocument();
+    expect(screen.getByText("No current alerts.")).toBeInTheDocument();
+    expect(screen.queryByText("No spend data yet.")).not.toBeInTheDocument();
   });
 
   it("keeps the shortcut chip wired to refresh", async () => {
