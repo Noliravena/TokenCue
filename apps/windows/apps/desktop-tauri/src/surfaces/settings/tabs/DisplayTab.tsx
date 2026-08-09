@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocale } from "../../../hooks/useLocale";
 import { Field, Select, Toggle } from "../../../components/FormControls";
 import type { MenuBarDisplayMode, TrayIconMode, TrayVisibilityStatusDto } from "../../../types/bridge";
@@ -8,10 +8,6 @@ import { ProviderIcon } from "../../../components/providers/ProviderIcon";
 import { getProviderIcon } from "../../../components/providers/providerIcons";
 import FloatBarSettingsSection from "../../../floatbar/SettingsSection";
 import { getTrayVisibilityStatus } from "../../../lib/tauri";
-
-function clampWindowScalePercent(value: number): number {
-  return Math.min(250, Math.max(100, Number.isFinite(value) ? value : 100));
-}
 
 /**
  * Tray label layouts, shown as selectable sample renders rather than a
@@ -46,9 +42,6 @@ export default function DisplayTab({
   saving,
 }: TabProps & { mode?: "menuBar" | "menu" }) {
   const { t } = useLocale();
-  const [windowScaleDraft, setWindowScaleDraft] = useState(() =>
-    clampWindowScalePercent(settings.windowScalePercent),
-  );
   const [trayVisibility, setTrayVisibility] = useState<TrayVisibilityStatusDto | null>(null);
   // Sample the user's own first provider so the preview matches what their
   // tray actually shows; Codex stands in before anything is enabled.
@@ -60,16 +53,6 @@ export default function DisplayTab({
       .catch(() => setTrayVisibility(null));
   }, []);
 
-  useEffect(() => {
-    setWindowScaleDraft(clampWindowScalePercent(settings.windowScalePercent));
-  }, [settings.windowScalePercent]);
-
-  const commitWindowScale = useCallback(() => {
-    const next = clampWindowScalePercent(windowScaleDraft);
-    if (next !== settings.windowScalePercent) {
-      set({ windowScalePercent: next });
-    }
-  }, [set, settings.windowScalePercent, windowScaleDraft]);
   return (
     <>
       {/* ── Menu bar ─────────────────────────────────────────────── */}
@@ -183,29 +166,6 @@ export default function DisplayTab({
       {mode === "menu" && <section className="settings-section">
         <h3 className="settings-section__title">{t("TabMenu")}</h3>
         <div className="settings-section__group">
-          <Field
-            label={`${t("WindowScaleLabel")} (${windowScaleDraft}%)`}
-            description={t("WindowScaleHelper")}
-          >
-            <input
-              type="range"
-              min={100}
-              max={250}
-              step={5}
-              value={windowScaleDraft}
-              disabled={saving}
-              onChange={(e) =>
-                setWindowScaleDraft(
-                  clampWindowScalePercent(Number(e.target.value)),
-                )
-              }
-              onPointerUp={commitWindowScale}
-              onTouchEnd={commitWindowScale}
-              onBlur={commitWindowScale}
-              onKeyUp={commitWindowScale}
-              aria-label={t("WindowScaleAriaLabel")}
-            />
-          </Field>
           <Field
             label={t("ShowAsUsedLabel")}
             description={t("ShowAsUsedHelper")}

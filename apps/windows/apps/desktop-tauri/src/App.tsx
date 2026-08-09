@@ -4,7 +4,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   getBootstrapState,
   getSettingsSnapshot,
-  setSurfaceMode,
+  openFlyoutWindow,
 } from "./lib/tauri";
 import { useSurfaceSnapshot } from "./hooks/useSurfaceSnapshot";
 import { useTheme } from "./hooks/useTheme";
@@ -19,7 +19,6 @@ import type { BootstrapState, ThemePreference } from "./types/bridge";
 import type { SurfaceSnapshot } from "./hooks/useSurfaceSnapshot";
 
 const Settings = lazy(() => import("./surfaces/Settings"));
-const PopOutPanel = lazy(() => import("./surfaces/PopOutPanel"));
 const FloatBar = lazy(() => import("./floatbar/FloatBar"));
 
 function SurfaceFallback() {
@@ -91,11 +90,11 @@ function AppInner() {
       });
 
     // Listen for user-registered global shortcut events from the
-    // `register_global_shortcut` command. The persistent shortcut (bound via
-    // shortcut_bridge::plugin) already opens the PopOut dashboard natively;
-    // this listener is the fallback for ad-hoc capture-mode registrations.
+    // `register_global_shortcut` command. The persistent shortcut already
+    // opens the fixed flyout natively; this listener is the fallback for
+    // ad-hoc capture-mode registrations and must use the same window.
     const unlistenPromise = listen<string>("global-shortcut-triggered", () => {
-      void setSurfaceMode("popOut", { kind: "dashboard" }).catch(() => {});
+      void openFlyoutWindow().catch(() => {});
     });
 
     const unlistenSettingsChangePromise = isSettingsWindow()
@@ -175,10 +174,9 @@ function AppInner() {
   }
 
   // First-run onboarding belongs only to a tray-sized application surface.
-  // The shared `main` window can still host Settings/PopOut in proof mode and
-  // older transition paths, so checking detached-window labels alone is not
-  // sufficient: a wide main-window surface must not inherit the tray panel's
-  // 380px width constraint either.
+  // The shared `main` window can still host Settings, so checking detached
+  // window labels alone is not sufficient: a wide main-window surface must
+  // not inherit the tray panel's 380px width constraint either.
   const isTraySizedSurface =
     isFlyoutWindow() || surface.mode === "trayPanel";
   if (
@@ -208,6 +206,21 @@ function AppInner() {
   return <SurfaceRouter surface={surface} state={state} />;
 }
 
+/**
+ * A stale on-disk surface snapshot from an older build may still say PopOut.
+ * Never mount the retired dashboard: hide that shared window and converge on
+ * the one fixed-height flyout used by every current entry point.
+ */
+function LegacyPopOutRedirect() {
+  useEffect(() => {
+    void getCurrentWebviewWindow()
+      .hide()
+      .finally(() => openFlyoutWindow().catch(() => {}));
+  }, []);
+
+  return null;
+}
+
 function SurfaceRouter({
   surface,
   state,
@@ -220,17 +233,8 @@ function SurfaceRouter({
       return null;
     case "trayPanel":
       return <TrayPanel state={state} />;
-    case "popOut": {
-      const providerId =
-        surface.target.kind === "provider"
-          ? surface.target.providerId
-          : undefined;
-      return (
-        <Suspense fallback={<SurfaceFallback />}>
-          <PopOutPanel state={state} providerId={providerId} />
-        </Suspense>
-      );
-    }
+    case "popOut":
+      return <LegacyPopOutRedirect />;
     case "settings":
       return (
         <Suspense fallback={<SurfaceFallback />}>

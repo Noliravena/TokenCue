@@ -50,7 +50,6 @@ const displayOverrides: Record<string, string> = {
   TabNotifications: "通知",
   TabProviders: "供应商",
   TabUsageSpend: "花费",
-  TooltipPopOut: "弹出仪表盘",
   UsageSpendCaption: "本机估算，按原生币种分别展示，不进行隐式汇率换算。",
   UsageSpendCol30d: "30 天",
   UsageSpendCol7d: "7 天",

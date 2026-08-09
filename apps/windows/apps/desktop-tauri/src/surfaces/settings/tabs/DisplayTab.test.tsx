@@ -5,7 +5,7 @@ vi.mock("../../../hooks/useLocale", () => ({
   useLocale: () => ({ t: (key: string) => key, language: "english" }),
 }));
 // The FloatBar section pulls in its own bridge dependencies; it is irrelevant
-// to the window-scale control under test.
+// to the menu preference under test.
 vi.mock("../../../floatbar/SettingsSection", () => ({
   default: () => null,
 }));
@@ -32,29 +32,7 @@ function renderTab(set: (patch: Record<string, unknown>) => void) {
   );
 }
 
-describe("DisplayTab window scale", () => {
-  it("commits the new window scale on blur", () => {
-    const set = vi.fn();
-    renderTab(set);
-    const slider = screen.getByRole("slider", { name: "WindowScaleAriaLabel" });
-
-    fireEvent.change(slider, { target: { value: "175" } });
-    fireEvent.blur(slider);
-
-    expect(set).toHaveBeenCalledWith({ windowScalePercent: 175 });
-  });
-
-  it("does not commit when the value is unchanged", () => {
-    const set = vi.fn();
-    renderTab(set);
-    const slider = screen.getByRole("slider", { name: "WindowScaleAriaLabel" });
-
-    fireEvent.change(slider, { target: { value: "100" } });
-    fireEvent.blur(slider);
-
-    expect(set).not.toHaveBeenCalled();
-  });
-
+describe("DisplayTab menu preferences", () => {
   it("updates the exhausted reset display preference", () => {
     const set = vi.fn();
     renderTab(set);

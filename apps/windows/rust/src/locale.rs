@@ -445,8 +445,6 @@ locale_keys! {
     StatusLabel,
 
     // Tray - Single icon mode
-    TrayOpenTokenCue,
-    TrayPopOutDashboard,
     TrayShowWindow,
     TrayShowFloatBar,
     TrayRefreshAll,
@@ -469,7 +467,6 @@ locale_keys! {
     TrayCreditsRow,
 
     // Tray - Per-provider mode
-    TrayProviderPopOut,
     TrayProviderRefresh,
     TrayProviderSettings,
     TrayProviderQuit,
@@ -771,12 +768,7 @@ locale_keys! {
     DisplayModeDetailed,
     DisplayModeCompact,
     DisplayModeMinimal,
-    WindowScaleLabel,
-    WindowScaleHelper,
-    WindowScaleAriaLabel,
     WindowMinimize,
-    WindowMaximize,
-    WindowRestore,
     WindowClose,
     ShowAsUsedLabel,
     ShowAsUsedHelper,
@@ -807,23 +799,7 @@ locale_keys! {
     SettingsStatusSaving,
     ApiKeysTabHint,
 
-    // Tauri desktop shell — tray / popout
-    FetchingProviderData,
-    NoProvidersConfigured,
-    EnableProvidersHint,
-    OpenSettingsButton,
-    TooltipRefresh,
-    TooltipSettings,
-    TooltipPopOut,
-    TooltipBackToTray,
-    TrayCardErrorBadge,
-    SummaryProvidersLabel,
-    SummaryRefreshing,
-    SummaryFailed,
-    SummaryWithErrors,
-
     // Tauri desktop shell — provider detail
-    DetailBackButton,
     DetailWindowPrimary,
     DetailWindowSecondary,
     DetailWindowModelSpecific,

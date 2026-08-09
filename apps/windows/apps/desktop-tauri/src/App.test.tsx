@@ -1,4 +1,4 @@
-import { render, waitFor } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // App.tsx routes by `getCurrentWebviewWindow().label` before falling through
@@ -9,16 +9,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const webviewWindowMocks = vi.hoisted(() => ({
   label: "main",
+  hide: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/webviewWindow", () => ({
-  getCurrentWebviewWindow: () => ({ label: webviewWindowMocks.label }),
+  getCurrentWebviewWindow: () => ({
+    label: webviewWindowMocks.label,
+    hide: webviewWindowMocks.hide,
+  }),
 }));
 
 const tauriMocks = vi.hoisted(() => ({
   getBootstrapState: vi.fn(),
   getSettingsSnapshot: vi.fn(),
-  setSurfaceMode: vi.fn(),
+  openFlyoutWindow: vi.fn(),
   getLocaleStrings: vi.fn(),
   setUiLanguage: vi.fn(),
   getCurrentSurfaceState: vi.fn(),
@@ -28,6 +32,7 @@ vi.mock("./lib/tauri", () => tauriMocks);
 
 const eventMocks = vi.hoisted(() => ({
   listen: vi.fn(),
+  handlers: new Map<string, (event: { payload: unknown }) => void>(),
 }));
 
 vi.mock("@tauri-apps/api/event", () => eventMocks);
@@ -40,9 +45,6 @@ const surfaceMocks = vi.hoisted(() => ({
 // Stand-in surfaces: assert routing, not each surface's own rendering.
 vi.mock("./surfaces/TrayPanel", () => ({
   default: () => <div data-testid="surface-tray-panel" />,
-}));
-vi.mock("./surfaces/PopOutPanel", () => ({
-  default: () => <div data-testid="surface-pop-out-panel" />,
 }));
 vi.mock("./surfaces/Settings", () => ({
   default: () => <div data-testid="surface-settings" />,
@@ -141,7 +143,9 @@ function bootstrap(
 describe("App window-label routing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    eventMocks.handlers.clear();
     webviewWindowMocks.label = "main";
+    webviewWindowMocks.hide.mockResolvedValue(undefined);
     surfaceMocks.mode = "hidden";
     surfaceMocks.target = { kind: "summary" };
     tauriMocks.getBootstrapState.mockResolvedValue(bootstrap());
@@ -151,7 +155,13 @@ describe("App window-label routing", () => {
       mode: "hidden",
       target: { kind: "summary" },
     });
-    eventMocks.listen.mockResolvedValue(() => {});
+    tauriMocks.openFlyoutWindow.mockResolvedValue(undefined);
+    eventMocks.listen.mockImplementation(
+      (event: string, handler: (event: { payload: unknown }) => void) => {
+        eventMocks.handlers.set(event, handler);
+        return Promise.resolve(() => {});
+      },
+    );
   });
 
   it("routes the dedicated flyout window to TrayPanel", async () => {
@@ -162,7 +172,6 @@ describe("App window-label routing", () => {
     await waitFor(() => {
       expect(queryByTestId("surface-tray-panel")).not.toBeNull();
     });
-    expect(queryByTestId("surface-pop-out-panel")).toBeNull();
     expect(queryByTestId("surface-settings")).toBeNull();
     expect(queryByTestId("surface-float-bar")).toBeNull();
   });
@@ -258,5 +267,36 @@ describe("App window-label routing", () => {
     });
     expect(queryByTestId("surface-tray-panel")).toBeNull();
     expect(container.firstChild).toBeNull();
+  });
+
+  it("redirects a stale legacy PopOut snapshot to the fixed flyout", async () => {
+    surfaceMocks.mode = "popOut";
+    surfaceMocks.target = { kind: "dashboard" };
+
+    const { container, queryByTestId } = render(<App />);
+
+    await waitFor(() => {
+      expect(webviewWindowMocks.hide).toHaveBeenCalledTimes(1);
+      expect(tauriMocks.openFlyoutWindow).toHaveBeenCalledTimes(1);
+    });
+    expect(queryByTestId("surface-tray-panel")).toBeNull();
+    expect(container.firstChild).toBeNull();
+  });
+
+  it("routes the global shortcut fallback to the fixed flyout", async () => {
+    render(<App />);
+
+    await waitFor(() => {
+      expect(eventMocks.handlers.has("global-shortcut-triggered")).toBe(true);
+    });
+    act(() => {
+      eventMocks.handlers.get("global-shortcut-triggered")?.({
+        payload: "Ctrl+Shift+U",
+      });
+    });
+
+    await waitFor(() => {
+      expect(tauriMocks.openFlyoutWindow).toHaveBeenCalledTimes(1);
+    });
   });
 });

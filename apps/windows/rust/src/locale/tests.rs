@@ -134,8 +134,6 @@ fn test_japanese_tray_panel_locale_values_are_translated() {
         (LocaleKey::ProviderStatusStale, "古い"),
         (LocaleKey::ProviderStatusError, "エラー"),
         (LocaleKey::ProviderStatusLoading, "読み込み中"),
-        (LocaleKey::TrayCardErrorBadge, "エラー"),
-        (LocaleKey::SummaryWithErrors, "エラーあり"),
         (
             LocaleKey::StateLoadingProviders,
             "プロバイダーを読み込み中...",
