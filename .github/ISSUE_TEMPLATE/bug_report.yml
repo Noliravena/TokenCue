@@ -1,0 +1,59 @@
+name: Bug report
+description: Report a reproducible TokenCue defect
+title: "[Bug]: "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a bug. Remove account details and secrets from every field, log, and screenshot.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Windows 11
+        - macOS 15 or newer
+        - Shared contracts or CLI
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: 0.1.0 or commit hash
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe the observed and expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Open...
+        2. Select...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Redacted evidence
+      description: Add sanitized logs or screenshots. Never include keys, cookies, tokens, emails, browser databases, or raw provider responses.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Safety checks
+      options:
+        - label: I searched existing issues and discussions.
+          required: true
+        - label: I removed credentials and personal information from this report.
+          required: true
+        - label: This is not a security vulnerability; security issues will be reported privately.
+          required: true

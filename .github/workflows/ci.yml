@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  contracts:
+    name: Shared contracts and secret gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate generated contracts, locales, and secret shapes
+        run: pnpm run check
+
+  windows:
+    name: Windows application
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.18.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: apps/windows/apps/desktop-tauri/pnpm-lock.yaml
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: x86_64-pc-windows-msvc
+      - name: Install frontend dependencies
+        run: pnpm --dir apps/windows/apps/desktop-tauri install --frozen-lockfile
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path apps/windows/Cargo.toml --all -- --check
+      - name: Lint Rust workspace
+        run: cargo clippy --manifest-path apps/windows/Cargo.toml --workspace --all-targets -- -D warnings
+      - name: Test Rust workspace
+        run: cargo test --manifest-path apps/windows/Cargo.toml --workspace
+      - name: Test frontend
+        run: pnpm --dir apps/windows/apps/desktop-tauri test
+      - name: Type-check and build frontend
+        run: pnpm --dir apps/windows/apps/desktop-tauri run build
