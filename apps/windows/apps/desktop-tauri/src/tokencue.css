@@ -137,7 +137,9 @@ select:focus-visible {
   display: block;
 }
 
-/* Warm tray: 380px panel with card quota + top tabs. */
+/* Warm tray: fill the native flyout viewport. Windows owns the outer window
+   corners; keeping a second rounded/clipped web panel here creates an inert
+   perimeter that prevents caption controls from reaching the window edge. */
 .tokencue-tray {
   display: flex;
   width: min(var(--tb-tray-width), 100vw);
@@ -147,10 +149,10 @@ select:focus-visible {
   box-sizing: border-box;
   flex-direction: column;
   border: 0;
-  border-radius: var(--tb-tray-radius);
+  border-radius: 0;
   background: var(--tb-surface);
   color: var(--tb-text);
-  box-shadow: var(--tb-shadow), 0 0 0 1px color-mix(in srgb, var(--tb-text) 7%, transparent);
+  box-shadow: none;
   font-family: var(--tb-type-windows-family);
   zoom: var(--tray-scale, 1);
 }
@@ -203,7 +205,7 @@ select:focus-visible {
 }
 
 .tokencue-tray .tokencue-tray__close {
-  border-top-right-radius: var(--tb-tray-radius);
+  border-top-right-radius: 0;
 }
 
 .tokencue-tray__tabs {
@@ -890,10 +892,10 @@ select:focus-visible {
   box-sizing: border-box;
   flex-direction: column;
   overflow: hidden;
-  border-radius: var(--tb-tray-radius);
+  border-radius: 0;
   background: var(--tb-surface);
   color: var(--tb-text);
-  box-shadow: var(--tb-shadow), 0 0 0 1px color-mix(in srgb, var(--tb-text) 7%, transparent);
+  box-shadow: none;
   font-family: var(--tb-type-windows-family);
   zoom: var(--tray-scale, 1);
 }
