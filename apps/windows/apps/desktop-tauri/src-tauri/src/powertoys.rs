@@ -1,4 +1,7 @@
-use std::sync::Mutex;
+use std::sync::{
+    Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 use std::time::Duration;
 
 use chrono::Utc;
@@ -12,6 +15,8 @@ use crate::commands::{
 use crate::state::AppState;
 
 pub const STATUS_PIPE_NAME: &str = r"\\.\pipe\TokenCue.Status";
+static PIPE_ENABLED: AtomicBool = AtomicBool::new(false);
+static PIPE_RUNNING: AtomicBool = AtomicBool::new(false);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,9 +49,28 @@ pub struct PowerToysProviderSnapshot {
 #[cfg(not(windows))]
 pub fn install(_app: tauri::AppHandle) {}
 
+#[cfg(not(windows))]
+pub fn set_enabled(_app: tauri::AppHandle, _enabled: bool) {}
+
 #[cfg(windows)]
 pub fn install(app: tauri::AppHandle) {
+    set_enabled(app, true);
+}
+
+#[cfg(windows)]
+pub fn set_enabled(app: tauri::AppHandle, enabled: bool) {
+    PIPE_ENABLED.store(enabled, Ordering::Release);
+    if !enabled || PIPE_RUNNING.swap(true, Ordering::AcqRel) {
+        return;
+    }
     tauri::async_runtime::spawn(async move {
+        struct RunningGuard;
+        impl Drop for RunningGuard {
+            fn drop(&mut self) {
+                PIPE_RUNNING.store(false, Ordering::Release);
+            }
+        }
+        let _guard = RunningGuard;
         run_status_pipe(app).await;
     });
 }
@@ -134,16 +158,32 @@ async fn run_status_pipe(app: tauri::AppHandle) {
     use tokio::net::windows::named_pipe::ServerOptions;
 
     loop {
+        if !PIPE_ENABLED.load(Ordering::Acquire) {
+            return;
+        }
         let server = match ServerOptions::new().create(STATUS_PIPE_NAME) {
             Ok(server) => server,
             Err(err) => {
                 tracing::warn!("failed to create PowerToys status pipe: {err}");
-                tokio::time::sleep(Duration::from_secs(2)).await;
+                tokio::time::sleep(Duration::from_millis(250)).await;
                 continue;
             }
         };
 
-        if let Err(err) = server.connect().await {
+        let connection = loop {
+            tokio::select! {
+                result = server.connect() => break Some(result),
+                _ = tokio::time::sleep(Duration::from_millis(250)) => {
+                    if !PIPE_ENABLED.load(Ordering::Acquire) {
+                        break None;
+                    }
+                }
+            }
+        };
+        let Some(connection) = connection else {
+            return;
+        };
+        if let Err(err) = connection {
             tracing::warn!("PowerToys status pipe connection failed: {err}");
             continue;
         }

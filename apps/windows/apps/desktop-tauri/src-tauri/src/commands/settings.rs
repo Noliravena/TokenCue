@@ -393,6 +393,7 @@ pub async fn update_settings(
     let rebuild_tray_menu = patch.rebuilds_tray_menu();
     let refresh_tray_presentation = patch.refreshes_tray_presentation();
     let tray_promotion_changed = patch.changes_tray_promotion();
+    let powertoys_status_pipe_enabled = patch.powertoys_status_pipe_enabled;
     let previous_promoted = settings.promote_tray_icon;
     let previous_language = settings.ui_language;
 
@@ -404,6 +405,9 @@ pub async fn update_settings(
     }
 
     settings.save().map_err(|e| e.to_string())?;
+    if let Some(enabled) = powertoys_status_pipe_enabled {
+        crate::powertoys::set_enabled(app.clone(), enabled);
+    }
     if clear_local_usage_cache {
         crate::commands::clear_provider_local_usage_cache();
     }
@@ -433,9 +437,8 @@ pub async fn update_settings(
         }
     }
 
-    // Notify other windows (fixed flyout, settings, float bar) so they re-read
-    // settings live — e.g. the Display tab's window-scale slider takes effect
-    // immediately instead of only after the flyout is reopened.
+    // Notify other windows (fixed flyout, settings, float bar) so theme,
+    // animation and menu preferences take effect immediately.
     events::emit_settings_changed(&app);
     if refresh_provider_data {
         let app = app.clone();
@@ -450,6 +453,21 @@ pub async fn update_settings(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn start_minimized_patch_reaches_persisted_settings_model() {
+        let mut settings = Settings::default();
+        assert!(!settings.start_minimized);
+
+        SettingsUpdate {
+            start_minimized: Some(true),
+            ..Default::default()
+        }
+        .apply_to(&mut settings)
+        .expect("startup patch");
+
+        assert!(settings.start_minimized);
+    }
 
     #[test]
     fn only_data_affecting_settings_refresh_providers() {
