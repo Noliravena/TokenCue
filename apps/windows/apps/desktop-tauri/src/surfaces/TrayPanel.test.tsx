@@ -24,6 +24,8 @@ const tauriMocks = vi.hoisted(() => ({
   getUsageSpendSummary: vi.fn(),
   getProviderChartData: vi.fn(),
   getAppInfo: vi.fn(),
+  getCodexAccountsState: vi.fn(),
+  codexAccountSwitch: vi.fn(),
 }));
 
 const eventMocks = vi.hoisted(() => ({
@@ -50,7 +52,7 @@ vi.mock("../lib/tauri", () => tauriMocks);
 vi.mock("@tauri-apps/api/event", () => eventMocks);
 vi.mock("@tauri-apps/api/window", () => windowMocks);
 
-import TrayPanel from "./TrayPanel";
+import TrayPanel, { shouldReplaceExhaustedPercent } from "./TrayPanel";
 import { LocaleProvider } from "../i18n/LocaleProvider";
 import { TEST_PROVIDER_CATALOG } from "../test/providerCatalog";
 import { buildBundle } from "../test/localeHarness";
@@ -258,6 +260,8 @@ describe("TokenCue handoff tray panel", () => {
       buildNumber: "1042",
       tagline: "Local quota tracking",
     });
+    tauriMocks.getCodexAccountsState.mockResolvedValue({ accounts: [], snapshots: {} });
+    tauriMocks.codexAccountSwitch.mockResolvedValue({});
     tauriMocks.getLocaleStrings.mockResolvedValue(
       buildBundle({
         ActionRefresh: "Refresh",
@@ -308,6 +312,11 @@ describe("TokenCue handoff tray panel", () => {
         ShowNotificationsHelper: "Notify when usage crosses a threshold.",
         ShowUsageAsUsed: "Show usage as used",
         ShowUsageAsUsedHelper: "Show used percentage instead of remaining.",
+        ThemeSelection: "Theme",
+        ThemeHelper: "Auto follows the system; Light and Dark override it.",
+        ThemeAutoOption: "Auto (system)",
+        LightMode: "Light",
+        DarkMode: "Dark",
         RefreshIntervalLabel: "Refresh interval",
         RefreshIntervalHelper: "How often providers refresh.",
         WindowClose: "Close",
@@ -711,6 +720,22 @@ describe("TokenCue handoff tray panel", () => {
     });
   });
 
+  it("updates the theme from the popup settings tab", async () => {
+    renderTrayPanel([provider("codex", "Codex", 40)]);
+    fireEvent.click(await screen.findByRole("tab", { name: /Settings/i }));
+
+    const theme = await screen.findByRole("combobox", { name: "Theme" });
+    expect(theme).toHaveValue("dark");
+    expect(theme.querySelectorAll("option")).toHaveLength(3);
+
+    fireEvent.change(theme, { target: { value: "light" } });
+
+    await waitFor(() => {
+      expect(tauriMocks.updateSettings).toHaveBeenCalledWith({ theme: "light" });
+      expect(theme).toHaveValue("light");
+    });
+  });
+
   it("marks snapshots stale while retaining their last successful data", async () => {
     const { container } = renderTrayPanel([
       provider("codex", "Codex", 64, { updatedAt: "2020-01-01T00:00:00Z" }),
@@ -774,6 +799,54 @@ describe("TokenCue handoff tray panel", () => {
     );
     expect(thirtyDay?.textContent).toContain("31.20");
     expect(thirtyDay?.textContent).toContain("128.20");
+  });
+
+  it("shows Grok CLI dollar spend and daily cost history", async () => {
+    tauriMocks.getUsageSpendSummary.mockResolvedValue({
+      rows: [
+        {
+          providerId: "grok",
+          displayName: "Grok",
+          sevenDay: 1.25,
+          thirtyDay: 2.5,
+          currency: "USD",
+          source: "local Grok CLI logs (estimated)",
+          usagePercent: null,
+          resetsAt: null,
+        },
+      ],
+      today: 0.25,
+      daily: [
+        { date: "2026-08-09", value: 0.5 },
+        { date: "2026-08-10", value: 0.25 },
+      ],
+    });
+    tauriMocks.getProviderChartData.mockResolvedValue({
+      providerId: "grok",
+      costHistory: [
+        { date: "2026-08-09", value: 0.5 },
+        { date: "2026-08-10", value: 0.25 },
+      ],
+      creditsHistory: [],
+      usageBreakdown: [],
+      localUsage: null,
+    });
+    const { container } = renderTrayPanel(
+      [provider("grok", "Grok", 37.5)],
+      { enabledProviders: ["grok"] },
+    );
+
+    fireEvent.click(await screen.findByRole("tab", { name: /Spend/i }));
+    expect(await screen.findByText("7d $1.25")).toBeInTheDocument();
+    expect(screen.getAllByText("$2.50").length).toBeGreaterThan(0);
+    expect(screen.queryByText("38% used")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: /History/i }));
+    await waitFor(() => {
+      expect(container.querySelector(".tokencue-tray__spark-line")).not.toBeNull();
+    });
+    expect(tauriMocks.getProviderChartData).toHaveBeenCalledWith("grok");
+    expect(screen.getByText("$0.25")).toBeInTheDocument();
   });
 
   it("labels snapshot-derived history rows as current alerts", async () => {
@@ -855,5 +928,26 @@ describe("TokenCue handoff tray panel", () => {
         expect.objectContaining({ width: 380, height: 600 }),
       );
     });
+  });
+
+  it("replaces an exhausted percentage only when a concrete future reset exists", () => {
+    const now = Date.parse("2026-08-10T00:00:00Z");
+    expect(
+      shouldReplaceExhaustedPercent(
+        rateWindow(100, {
+          isExhausted: true,
+          resetsAt: "2026-08-10T01:00:00Z",
+        }),
+        "Resets in 1h",
+        now,
+      ),
+    ).toBe(true);
+    expect(
+      shouldReplaceExhaustedPercent(
+        rateWindow(100, { isExhausted: true, resetsAt: null }),
+        "in 1h",
+        now,
+      ),
+    ).toBe(false);
   });
 });

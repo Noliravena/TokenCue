@@ -3895,3 +3895,93 @@ body:has(.tray-panel-reveal) {
 .agent-sessions__error {
   color: var(--provider-status-error);
 }
+/* The in-app animation preference is stronger than the OS motion preference.
+   Keep layout-affecting state changes, but make their visual transition immediate. */
+:root[data-animations="disabled"] *,
+:root[data-animations="disabled"] *::before,
+:root[data-animations="disabled"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: 0.01ms !important;
+}
+
+.tokencue-tray__accounts,
+.tokencue-tray__accounts-error {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--tokencue-border, rgba(127, 127, 127, 0.2));
+}
+
+.tokencue-tray__card-pct-reset {
+  display: block;
+  max-width: 104px;
+  font-size: 0.68rem;
+  line-height: 1.2;
+  text-align: right;
+}
+
+.tokencue-tray__accounts > header,
+.tokencue-tray__accounts > ul > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tokencue-tray__accounts > header {
+  margin-bottom: 6px;
+  font-size: 0.72rem;
+  color: var(--tokencue-text-muted, #9296a0);
+}
+
+.tokencue-tray__accounts > ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tokencue-tray__accounts > ul > li[data-active="true"] {
+  font-weight: 600;
+}
+
+.tokencue-tray__accounts-meta {
+  display: grid;
+  flex: 1 1 auto;
+  gap: 3px;
+  min-width: 0;
+  font-size: 0.72rem;
+}
+
+.tokencue-tray__accounts-meta > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tokencue-tray__accounts-meta small {
+  margin-left: 5px;
+  color: var(--tokencue-accent, #6d8cff);
+}
+
+.tokencue-tray__accounts-track {
+  display: block;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: rgba(127, 127, 127, 0.2);
+}
+
+.tokencue-tray__accounts-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--tokencue-accent, #6d8cff);
+}
+
+.tokencue-tray__accounts-error {
+  color: var(--tokencue-error, #e96565);
+  font-size: 0.72rem;
+}

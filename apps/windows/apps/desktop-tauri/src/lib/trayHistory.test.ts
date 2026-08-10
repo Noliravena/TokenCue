@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { ProviderUsageSnapshot } from "../types/bridge";
 import {
   TRAY_HISTORY_STORAGE_KEY,
+  readTrayBillingHistory,
   readTrayHistory,
   updateTrayHistory,
 } from "./trayHistory";
@@ -14,7 +15,7 @@ function snapshot(
 ): ProviderUsageSnapshot {
   return {
     providerId: id,
-    displayName: id === "codex" ? "Codex" : "Claude",
+    displayName: id === "codex" ? "Codex" : id === "grok" ? "Grok" : "Claude",
     primary: {
       usedPercent,
       remainingPercent: 100 - usedPercent,
@@ -146,6 +147,96 @@ describe("tray history cache", () => {
 
     expect(events).toMatchObject([
       { providerId: "claude", kind: "connected" },
+    ]);
+  });
+
+  it("stores provider billing quota by local day and keeps the latest daily sample", () => {
+    const firstDay = new Date(2026, 7, 9, 10, 0, 0);
+    const laterFirstDay = new Date(2026, 7, 9, 18, 0, 0);
+    const secondDay = new Date(2026, 7, 10, 10, 0, 0);
+
+    updateTrayHistory(
+      [snapshot("grok", 18, firstDay.toISOString())],
+      70,
+      95,
+      localStorage,
+      firstDay.getTime(),
+    );
+    updateTrayHistory(
+      [snapshot("grok", 26, laterFirstDay.toISOString())],
+      70,
+      95,
+      localStorage,
+      laterFirstDay.getTime(),
+    );
+    updateTrayHistory(
+      [snapshot("grok", 31, secondDay.toISOString())],
+      70,
+      95,
+      localStorage,
+      secondDay.getTime(),
+    );
+
+    expect(readTrayBillingHistory("GROK")).toMatchObject([
+      { date: "2026-08-09", value: 26, metric: "quota", currency: "" },
+      { date: "2026-08-10", value: 31, metric: "quota", currency: "" },
+    ]);
+  });
+
+  it("records monetary spend and balance with distinct metrics", () => {
+    const observedAt = new Date(2026, 7, 10, 10, 0, 0);
+    const spend = snapshot("deepseek", 20, observedAt.toISOString(), null);
+    spend.cost = {
+      used: 4.25,
+      limit: 20,
+      remaining: 15.75,
+      currencyCode: "USD",
+      period: "Current month",
+      resetsAt: null,
+      formattedUsed: "$4.25",
+      formattedLimit: "$20.00",
+      balance: null,
+      formattedBalance: null,
+    };
+    const balance = snapshot("moonshot", 0, observedAt.toISOString(), null);
+    balance.primary.isInformational = true;
+    balance.cost = {
+      used: 0,
+      limit: null,
+      remaining: null,
+      currencyCode: "USD",
+      period: "Balance",
+      resetsAt: null,
+      formattedUsed: "$0.00",
+      formattedLimit: null,
+      balance: 12.5,
+      formattedBalance: "$12.50",
+    };
+
+    updateTrayHistory([spend, balance], 70, 95, localStorage, observedAt.getTime());
+
+    expect(readTrayBillingHistory("deepseek")).toMatchObject([
+      { value: 4.25, metric: "spend", currency: "USD" },
+    ]);
+    expect(readTrayBillingHistory("moonshot")).toMatchObject([
+      { value: 12.5, metric: "balance", currency: "USD" },
+    ]);
+  });
+
+  it("migrates the Grok quota history written by the previous store shape", () => {
+    localStorage.setItem(
+      TRAY_HISTORY_STORAGE_KEY,
+      JSON.stringify({
+        events: [],
+        baselines: {},
+        quotaHistory: {
+          grok: [{ date: "2026-08-10", value: 22, at: 1_786_300_000_000 }],
+        },
+      }),
+    );
+
+    expect(readTrayBillingHistory("grok")).toMatchObject([
+      { date: "2026-08-10", value: 22, metric: "quota", currency: "" },
     ]);
   });
 });

@@ -13,6 +13,8 @@ import type {
   ProviderUsageSnapshot,
   RateWindowSnapshot,
   SettingsUpdate,
+  ThemePreference,
+  UsageSpendRow,
   UsageSpendSummary,
 } from "../types/bridge";
 import {
@@ -25,14 +27,17 @@ import {
   refreshCadencePatch,
   refreshCadenceValue,
 } from "./settings/refreshCadence";
+import { THEME_OPTIONS } from "./settings/themeOptions";
 import { useTrayPanelController } from "../hooks/useTrayPanelController";
 import { useFormattedResetTime } from "../hooks/useFormattedResetTime";
 import { formatRelativeUpdated } from "../lib/relativeTime";
 import { formatChartDay, formatEventTime } from "../lib/eventTime";
 import { providerSupportsChartData } from "../lib/providerCharts";
 import {
+  readTrayBillingHistory,
   readTrayHistory,
   updateTrayHistory,
+  type TrayBillingHistoryPoint,
   type TrayHistoryEvent,
 } from "../lib/trayHistory";
 import { languageTag } from "../i18n/languageTag";
@@ -43,6 +48,7 @@ import type { LocaleKey } from "../i18n/keys";
 import { BrandMark } from "../components/BrandMark";
 import { WinGlyph } from "../components/WindowControls";
 import { EmptyProviderPanel } from "../components/EmptyProviderPanel";
+import CodexAccountsMenu from "../components/CodexAccountsMenu";
 
 type Translate = (key: LocaleKey) => string;
 type TrayTabId = "quota" | "spend" | "history" | "settings";
@@ -132,6 +138,41 @@ function formatMoney(
   } catch {
     return `$${value.toFixed(2)}`;
   }
+}
+
+function formatSpendRowValue(
+  row: UsageSpendRow,
+  field: "sevenDay" | "thirtyDay",
+  locale: string,
+  t: Translate,
+) {
+  if (
+    field === "thirtyDay" &&
+    row.usagePercent != null &&
+    Number.isFinite(row.usagePercent)
+  ) {
+    return `${Math.round(row.usagePercent)}% ${t("PanelUsedSuffix")}`;
+  }
+  if (
+    field === "thirtyDay" &&
+    row.balance != null &&
+    Number.isFinite(row.balance) &&
+    row.thirtyDay == null
+  ) {
+    return `${formatMoney(row.balance, row.currency, locale)} ${t("PanelLeftSuffix")}`;
+  }
+  return formatMoney(row[field], row.currency, locale);
+}
+
+function readBillingHistoryMap(
+  providers: ProviderUsageSnapshot[],
+): Record<string, TrayBillingHistoryPoint[]> {
+  return Object.fromEntries(
+    providers.map((provider) => [
+      provider.providerId,
+      readTrayBillingHistory(provider.providerId),
+    ]),
+  );
 }
 
 function compactCount(value: number | null | undefined) {
@@ -416,6 +457,8 @@ function QuotaWindowRow({
     settings.criticalUsageThreshold,
   );
   const informational = snapshot.isInformational === true;
+  const replacesPercent =
+    settings.showResetWhenExhausted && shouldReplaceExhaustedPercent(snapshot, reset);
 
   return (
     <div className="tokencue-tray__metric">
@@ -424,6 +467,8 @@ function QuotaWindowRow({
         <strong data-level={level}>
           {informational
             ? snapshot.resetDescription || reset || "—"
+            : replacesPercent
+              ? reset
             : `${Math.round(shown.value)}% ${t(shown.labelKey)}`}
         </strong>
       </div>
@@ -436,10 +481,24 @@ function QuotaWindowRow({
           />
         </div>
       ) : null}
-      {reset && reset !== snapshot.resetDescription ? (
+      {!replacesPercent && reset && reset !== snapshot.resetDescription ? (
         <span className="tokencue-tray__metric-reset tokencue-tray__mono">{reset}</span>
       ) : null}
     </div>
+  );
+}
+
+export function shouldReplaceExhaustedPercent(
+  snapshot: RateWindowSnapshot,
+  resetText: string | null,
+  nowMs = Date.now(),
+): boolean {
+  const resetTarget = snapshot.resetsAt ? Date.parse(snapshot.resetsAt) : Number.NaN;
+  return (
+    snapshot.isExhausted === true &&
+    Boolean(resetText) &&
+    Number.isFinite(resetTarget) &&
+    resetTarget > nowMs
   );
 }
 
@@ -622,6 +681,10 @@ function QuotaDetails({
         </span>
       </section>
 
+      {provider.providerId === "codex" && settings.showAllTokenAccountsInMenu ? (
+        <CodexAccountsMenu hidePersonalInfo={settings.hidePersonalInfo} />
+      ) : null}
+
       <button
         type="button"
         className="tokencue-tray__pill-btn tokencue-tray__details-action"
@@ -663,6 +726,8 @@ function QuotaCard({
   );
   const used = Math.max(0, Math.min(100, provider.primary.usedPercent));
   const shown = displayPercent(used, settings.showAsUsed);
+  const replacesPercent =
+    settings.showResetWhenExhausted && shouldReplaceExhaustedPercent(provider.primary, reset);
   const stale = isStale(provider, settings.refreshIntervalSecs);
   const className = [
     "tokencue-tray__card",
@@ -707,18 +772,24 @@ function QuotaCard({
         >
           <ProviderIcon providerId={provider.providerId} size={19} />
         </span>
-        <span className="tokencue-tray__card-meta">
-          <span className="tokencue-tray__card-name">{provider.displayName}</span>
-          <span className="tokencue-tray__card-sub tokencue-tray__mono">
-            {reset ? `${reset}` : "—"}
+          <span className="tokencue-tray__card-meta">
+            <span className="tokencue-tray__card-name">{provider.displayName}</span>
+            <span className="tokencue-tray__card-sub tokencue-tray__mono">
+            {replacesPercent ? provider.primaryLabel || provider.sourceLabel : reset || "—"}
+            </span>
           </span>
-        </span>
         <span className="tokencue-tray__card-pct" data-level={level}>
-          <span className="tokencue-tray__card-pct-num">
-            {Math.round(shown.value)}
-            <span className="tokencue-tray__card-pct-unit">%</span>
-          </span>
-          <span className="tokencue-tray__card-pct-label">{t(shown.labelKey)}</span>
+          {replacesPercent ? (
+            <span className="tokencue-tray__card-pct-reset tokencue-tray__mono">{reset}</span>
+          ) : (
+            <>
+              <span className="tokencue-tray__card-pct-num">
+                {Math.round(shown.value)}
+                <span className="tokencue-tray__card-pct-unit">%</span>
+              </span>
+              <span className="tokencue-tray__card-pct-label">{t(shown.labelKey)}</span>
+            </>
+          )}
         </span>
         <button
           type="button"
@@ -905,10 +976,16 @@ function SpendTab({
               </span>
               <span className="tokencue-tray__list-name">{row.displayName}</span>
               <span className="tokencue-tray__list-meta tokencue-tray__mono">
-                7d {formatMoney(row.sevenDay, row.currency, locale)}
+                {row.usagePercent == null
+                  ? row.balance != null
+                    ? row.thirtyDay == null
+                      ? row.source
+                      : `${formatMoney(row.balance, row.currency, locale)} ${t("PanelLeftSuffix")}`
+                    : `7d ${formatMoney(row.sevenDay, row.currency, locale)}`
+                  : row.source}
               </span>
               <span className="tokencue-tray__list-value">
-                {formatMoney(row.thirtyDay, row.currency, locale)}
+                {formatSpendRowValue(row, "thirtyDay", locale, t)}
               </span>
             </div>
           );
@@ -930,6 +1007,7 @@ function HistoryTab({
   range,
   onRangeChange,
   historyEvents,
+  billingHistory,
 }: {
   providers: ProviderUsageSnapshot[];
   settings: BootstrapState["settings"];
@@ -941,12 +1019,18 @@ function HistoryTab({
   range: HistoryRange;
   onRangeChange: (range: HistoryRange) => void;
   historyEvents: TrayHistoryEvent[];
+  billingHistory: Readonly<Record<string, TrayBillingHistoryPoint[]>>;
 }) {
-  // Only a few providers ship a real per-day series; the rest would need an
-  // invented curve, so the chart card simply does not appear for them.
+  // Codex/Claude/OpenAI ship native history. Other providers use locally
+  // observed daily billing snapshots, so no curve is invented.
   const chartable = useMemo(
-    () => providers.filter((provider) => providerSupportsChartData(provider.providerId)),
-    [providers],
+    () =>
+      providers.filter(
+        (provider) =>
+          providerSupportsChartData(provider.providerId) ||
+          (billingHistory[provider.providerId]?.length ?? 0) > 0,
+      ),
+    [billingHistory, providers],
   );
   const activeProvider =
     chartable.find((provider) => provider.providerId === chartProviderId) ??
@@ -1049,19 +1133,45 @@ function HistoryTab({
   );
   const visibleEvents = eventRows.length > 0 ? eventRows : alerts;
 
-  const series = useMemo(() => {
-    const source =
-      chart && chart.costHistory.length > 0
-        ? chart.costHistory
-        : (chart?.creditsHistory ?? []);
-    return source.slice(-range);
-  }, [chart, range]);
+  const historySeries = useMemo(() => {
+    if (chart && chart.costHistory.length > 0) {
+      return {
+        points: chart.costHistory.slice(-range),
+        metric: "spend" as const,
+        currency: LOCAL_SCANNER_CURRENCY,
+      };
+    }
+    if (chart && chart.creditsHistory.length > 0) {
+      return {
+        points: chart.creditsHistory.slice(-range),
+        metric: "spend" as const,
+        currency: LOCAL_SCANNER_CURRENCY,
+      };
+    }
+    const local = activeId ? (billingHistory[activeId] ?? []).slice(-range) : [];
+    const latest = local[local.length - 1];
+    return {
+      points: local,
+      metric: latest?.metric ?? "quota",
+      currency: latest?.currency ?? "",
+    };
+  }, [activeId, billingHistory, chart, range]);
+  const series = historySeries.points;
 
   const paths = useMemo(() => buildAreaPath(series.map((point) => point.value)), [series]);
+  const latestSeriesValue = series[series.length - 1]?.value;
+  const historyValueLabel =
+    latestSeriesValue == null
+      ? "—"
+      : historySeries.metric === "quota"
+        ? t("TrayHistoryCumulative").replace("{}", String(Math.round(latestSeriesValue)))
+        : historySeries.metric === "balance"
+          ? `${formatMoney(latestSeriesValue, historySeries.currency, locale)} ${t("PanelLeftSuffix")}`
+          : formatMoney(latestSeriesValue, historySeries.currency, locale);
 
   return (
     <div className="tokencue-tray__body">
-      {activeProvider && series.length > 1 ? (
+      {activeProvider && series.length > 0 ? (
         <article className="tokencue-tray__card tokencue-tray__card--stack">
           <div className="tokencue-tray__history-head">
             <span
@@ -1107,15 +1217,15 @@ function HistoryTab({
             <svg viewBox="0 0 300 78" preserveAspectRatio="none" aria-hidden>
               <path d={paths.area} className="tokencue-tray__spark-fill" />
               <path d={paths.line} className="tokencue-tray__spark-line" />
+              {series.length === 1 ? (
+                <circle cx="150" cy="39" r="3.5" className="tokencue-tray__spark-dot" />
+              ) : null}
             </svg>
           </div>
           <div className="tokencue-tray__spark-legend tokencue-tray__mono">
             <span>{formatChartDay(series[0].date, locale)}</span>
             <span>
-              {t("TrayHistoryCumulative").replace(
-                "{}",
-                String(Math.round(activeProvider.primary.usedPercent)),
-              )}
+              {historyValueLabel}
             </span>
             <span>{t("TrayTodayLabel")}</span>
           </div>
@@ -1248,6 +1358,28 @@ function SettingsTab({
         </label>
         <div className="tokencue-tray__setting-row">
           <span>
+            <span className="tokencue-tray__setting-title">{t("ThemeSelection")}</span>
+            <span className="tokencue-tray__setting-help">{t("ThemeHelper")}</span>
+          </span>
+          <select
+            className="tokencue-tray__chip tokencue-tray__chip--select"
+            aria-label={t("ThemeSelection")}
+            value={settings.theme}
+            onChange={(event) =>
+              void updatePanelSettings({
+                theme: event.currentTarget.value as ThemePreference,
+              })
+            }
+          >
+            {THEME_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {t(option.labelKey)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="tokencue-tray__setting-row">
+          <span>
             <span className="tokencue-tray__setting-title">{t("RefreshIntervalLabel")}</span>
             <span className="tokencue-tray__setting-help">{t("RefreshIntervalHelper")}</span>
           </span>
@@ -1329,6 +1461,9 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
   const [historyEvents, setHistoryEvents] = useState<TrayHistoryEvent[]>(() =>
     readTrayHistory(),
   );
+  const [billingHistory, setBillingHistory] = useState<
+    Record<string, TrayBillingHistoryPoint[]>
+  >(() => readBillingHistoryMap(sorted));
   const { spend, charts, appVersion } = useTrayDataCache(sorted, lastRefresh);
   useEffect(() => {
     if (sorted.length === 0) return;
@@ -1339,6 +1474,7 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
         settings.criticalUsageThreshold,
       ),
     );
+    setBillingHistory(readBillingHistoryMap(sorted));
   }, [settings.criticalUsageThreshold, settings.highUsageThreshold, sorted]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollPositionsRef = useRef<Record<TrayTabId, number>>({
@@ -1448,6 +1584,7 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
         range={historyRange}
         onRangeChange={setHistoryRange}
         historyEvents={historyEvents}
+        billingHistory={billingHistory}
       />
     );
   } else {

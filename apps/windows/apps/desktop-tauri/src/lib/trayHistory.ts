@@ -3,6 +3,7 @@ import type { ProviderUsageSnapshot } from "../types/bridge";
 const STORAGE_KEY = "tokencue.tray-history.v1";
 const MAX_EVENTS = 80;
 const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1_000;
+const MAX_BILLING_POINTS = 30;
 
 export type TrayHistoryEventKind =
   | "connected"
@@ -21,6 +22,18 @@ export interface TrayHistoryEvent {
   at: number;
 }
 
+export type TrayBillingMetric = "spend" | "balance" | "quota";
+
+export interface TrayBillingHistoryPoint {
+  /** Local calendar day as YYYY-MM-DD. */
+  date: string;
+  value: number;
+  /** Timestamp of the latest observation retained for this day. */
+  at: number;
+  metric: TrayBillingMetric;
+  currency: string;
+}
+
 interface ProviderBaseline {
   displayName: string;
   usedPercent: number;
@@ -31,10 +44,11 @@ interface ProviderBaseline {
 interface TrayHistoryStore {
   events: TrayHistoryEvent[];
   baselines: Record<string, ProviderBaseline>;
+  billingHistory: Record<string, TrayBillingHistoryPoint[]>;
 }
 
 function emptyStore(): TrayHistoryStore {
-  return { events: [], baselines: {} };
+  return { events: [], baselines: {}, billingHistory: {} };
 }
 
 function isHistoryEvent(value: unknown): value is TrayHistoryEvent {
@@ -52,11 +66,66 @@ function isHistoryEvent(value: unknown): value is TrayHistoryEvent {
   );
 }
 
+function isBillingHistoryPoint(value: unknown): value is TrayBillingHistoryPoint {
+  if (!value || typeof value !== "object") return false;
+  const point = value as Partial<TrayBillingHistoryPoint>;
+  return (
+    typeof point.date === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(point.date) &&
+    typeof point.value === "number" &&
+    Number.isFinite(point.value) &&
+    typeof point.at === "number" &&
+    Number.isFinite(point.at) &&
+    ["spend", "balance", "quota"].includes(String(point.metric)) &&
+    typeof point.currency === "string"
+  );
+}
+
+function readBillingHistory(value: unknown): Record<string, TrayBillingHistoryPoint[]> {
+  if (!value || typeof value !== "object") return {};
+  const result: Record<string, TrayBillingHistoryPoint[]> = {};
+  for (const [providerId, points] of Object.entries(value)) {
+    if (!Array.isArray(points)) continue;
+    result[providerId] = points.filter(isBillingHistoryPoint);
+  }
+  return result;
+}
+
+function migrateLegacyQuotaHistory(value: unknown): Record<string, TrayBillingHistoryPoint[]> {
+  if (!value || typeof value !== "object") return {};
+  const result: Record<string, TrayBillingHistoryPoint[]> = {};
+  for (const [providerId, points] of Object.entries(value)) {
+    if (!Array.isArray(points)) continue;
+    result[providerId] = points.flatMap((value) => {
+      if (!value || typeof value !== "object") return [];
+      const point = value as { date?: unknown; value?: unknown; at?: unknown };
+      if (
+        typeof point.date !== "string" ||
+        typeof point.value !== "number" ||
+        !Number.isFinite(point.value) ||
+        typeof point.at !== "number" ||
+        !Number.isFinite(point.at)
+      ) {
+        return [];
+      }
+      return [{ date: point.date, value: point.value, at: point.at, metric: "quota", currency: "" }];
+    });
+  }
+  return result;
+}
+
 function readStore(storage: Storage): TrayHistoryStore {
   try {
     const raw = storage.getItem(STORAGE_KEY);
     if (!raw) return emptyStore();
-    const parsed = JSON.parse(raw) as Partial<TrayHistoryStore>;
+    const parsed = JSON.parse(raw) as Partial<TrayHistoryStore> & {
+      quotaHistory?: unknown;
+    };
+    const billingHistory = readBillingHistory(parsed.billingHistory);
+    const legacyQuotaHistory = migrateLegacyQuotaHistory(parsed.quotaHistory);
+    for (const [providerId, points] of Object.entries(legacyQuotaHistory)) {
+      if (!billingHistory[providerId]?.length) billingHistory[providerId] = points;
+    }
     return {
       events: Array.isArray(parsed.events)
         ? parsed.events.filter(isHistoryEvent)
@@ -65,6 +134,7 @@ function readStore(storage: Storage): TrayHistoryStore {
         parsed.baselines && typeof parsed.baselines === "object"
           ? parsed.baselines
           : {},
+      billingHistory,
     };
   } catch {
     return emptyStore();
@@ -107,6 +177,77 @@ export function readTrayHistory(
   return readStore(storage).events;
 }
 
+export function readTrayBillingHistory(
+  providerId: string,
+  storage: Storage = window.localStorage,
+): TrayBillingHistoryPoint[] {
+  return readStore(storage).billingHistory[providerId.toLowerCase()] ?? [];
+}
+
+function localDateKey(timestamp: number): string {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function billingObservation(
+  provider: ProviderUsageSnapshot,
+  at: number,
+): TrayBillingHistoryPoint | null {
+  if (provider.error) return null;
+  const date = localDateKey(at);
+  const cost = provider.cost;
+  if (cost) {
+    const balancePeriod = cost.period.toLowerCase().includes("balance");
+    const balanceOnly =
+      balancePeriod ||
+      (cost.balance != null && cost.used === 0 && cost.limit == null);
+    const value = balanceOnly
+      ? cost.balance ?? (cost.used === 0 ? cost.limit : null) ?? cost.used
+      : cost.used;
+    if (!Number.isFinite(value) || value < 0) return null;
+    return {
+      date,
+      value,
+      at,
+      metric: balanceOnly ? "balance" : "spend",
+      currency: cost.currencyCode,
+    };
+  }
+
+  const value = provider.primary.usedPercent;
+  if (provider.primary.isInformational || !Number.isFinite(value)) return null;
+  return {
+    date,
+    value: Math.max(0, Math.min(100, value)),
+    at,
+    metric: "quota",
+    currency: "",
+  };
+}
+
+function updateBillingHistory(
+  store: TrayHistoryStore,
+  provider: ProviderUsageSnapshot,
+  now: number,
+) {
+  const at = eventTime(provider, now);
+  const point = billingObservation(provider, at);
+  if (!point) return;
+  const providerId = provider.providerId.toLowerCase();
+  const byDate = new Map<string, TrayBillingHistoryPoint>();
+  for (const existing of store.billingHistory[providerId] ?? []) {
+    if (existing.at >= now - MAX_AGE_MS) byDate.set(existing.date, existing);
+  }
+  const previous = byDate.get(point.date);
+  if (!previous || point.at >= previous.at) byDate.set(point.date, point);
+  store.billingHistory[providerId] = [...byDate.values()]
+    .sort((left, right) => left.at - right.at)
+    .slice(-MAX_BILLING_POINTS);
+}
+
 /**
  * Compare the latest provider snapshots with the last persisted baseline and
  * append only meaningful state transitions. The first observed snapshot set
@@ -125,6 +266,7 @@ export function updateTrayHistory(
   const appended: TrayHistoryEvent[] = [];
 
   for (const provider of providers) {
+    updateBillingHistory(store, provider, now);
     const previous = store.baselines[provider.providerId];
     const current: ProviderBaseline = {
       displayName: provider.displayName,
