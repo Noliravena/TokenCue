@@ -3,12 +3,19 @@
 All notable public changes to TokenCue are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project follows a developer-preview versioning scheme until the first signed release.
+and this project follows semantic versioning.
 
 ## [Unreleased]
 
 - Documentation reorganized into a single English documentation set under `docs/` with optimized file names.
 - Root guides and platform READMEs rewritten for clarity and cross-link consistency.
+
+## [1.0.0] - 2026-08-10
+
+### Changed
+
+- Promoted the Windows desktop application and CLI version metadata to `1.0.0`.
+- Completed Windows start-at-login registration and minimized-to-tray launch handling, including stale-command repair and accessible settings controls.
 
 ## [0.1.0] - 2026-08-08
 

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "TokenCue",
-  "version": "0.47.0",
+  "version": "1.0.0",
   "identifier": "com.tokencue.desktop",
   "build": {
     "beforeDevCommand": "pnpm run dev",

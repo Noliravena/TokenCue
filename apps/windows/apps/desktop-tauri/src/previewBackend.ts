@@ -508,7 +508,7 @@ export function installPreviewBackend() {
       case "get_credential_storage_status":
         return { manualCookies: "DPAPI", apiKeys: "Windows Credential Manager", tokenAccounts: "DPAPI" };
       case "get_app_info":
-        return { name: "TokenCue", version: "0.1.0-dev", buildNumber: "preview", tagline: "AI usage, at a glance" };
+        return { name: "TokenCue", version: "1.0.0-dev", buildNumber: "preview", tagline: "AI usage, at a glance" };
       case "get_api_keys":
       case "get_manual_cookies":
       case "codex_accounts_list":

@@ -1,6 +1,6 @@
 [package]
 name = "tokencue"
-version = "0.47.0"
+version = "1.0.0"
 edition = "2024"
 authors = ["TokenCue Contributors"]
 description = "Windows and WSL system tray app for monitoring AI provider usage limits"
