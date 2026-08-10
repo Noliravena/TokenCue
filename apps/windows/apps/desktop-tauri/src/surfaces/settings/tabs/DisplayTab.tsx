@@ -5,7 +5,7 @@ import type { MenuBarDisplayMode, TrayIconMode, TrayVisibilityStatusDto } from "
 import type { LocaleKey } from "../../../i18n/keys";
 import type { TabProps } from "../settingsTabs";
 import { ProviderIcon } from "../../../components/providers/ProviderIcon";
-import { getProviderIcon } from "../../../components/providers/providerIcons";
+import { providerTileStyle } from "../../../components/providers/providerIcons";
 import FloatBarSettingsSection from "../../../floatbar/SettingsSection";
 import { getTrayVisibilityStatus } from "../../../lib/tauri";
 
@@ -145,10 +145,10 @@ export default function DisplayTab({
                 <span className="display-mode-card__name">{t(option.labelKey)}</span>
                 <span className="display-mode-card__preview">
                   <span
-                    className="display-mode-card__brand"
-                    style={{ background: getProviderIcon(previewProviderId).brandColor }}
+                    className="provider-tile display-mode-card__brand"
+                    style={providerTileStyle(previewProviderId)}
                   >
-                    <ProviderIcon providerId={previewProviderId} size={11} />
+                    <ProviderIcon providerId={previewProviderId} size={10} />
                   </span>
                   {option.value !== "minimal" && <span>96%</span>}
                   {option.value === "detailed" && (

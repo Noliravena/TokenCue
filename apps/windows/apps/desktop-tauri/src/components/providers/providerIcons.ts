@@ -1,6 +1,8 @@
-// Ported from rust/src/native_ui/provider_icons.rs and
-// rust/src/native_ui/theme.rs::{provider_color, provider_icon}.
-// Keep in sync with the Rust registries when new providers are added.
+// Brand identity for every provider the app can show: the tile swatch, the
+// bundled mark, and the letter used when a provider ships no asset. Originally
+// ported from the retired `rust/src/native_ui` registries, which no longer
+// exist — this file is now the single source of truth, so a new provider needs
+// an entry here (the catalog test in providerIcons.test.ts enforces that).
 
 import abacus from "./icons/ProviderIcon-abacus.svg?raw";
 import alibaba from "./icons/ProviderIcon-alibaba.svg?raw";
@@ -62,27 +64,71 @@ import synthetic from "./icons/ProviderIcon-synthetic.svg?raw";
 import clawrouter from "./icons/ProviderIcon-clawrouter.svg?raw";
 
 /**
- * Replace hard-coded fills/strokes in the bundled brand SVGs with
- * `currentColor` so the icon picks up the brand color via CSS, making each
- * provider visually distinct in compact tray rows.
+ * Normalize every paint in a bundled brand SVG to `currentColor`.
+ *
+ * The assets arrive in three shapes — white-on-transparent, dark-on-transparent
+ * and the odd gradient — so rendering them as-authored produced marks that
+ * vanished on half the tiles. Flattening every fill/stroke (attribute form,
+ * inline `style` form and `url(#gradient)` references alike) means the badge
+ * decides the ink once, and the brand mark always reads at 16px.
  */
 function tint(raw: string): string {
-  return raw
-    .replace(/fill="white"/gi, 'fill="currentColor"')
-    .replace(/fill="#fff"/gi, 'fill="currentColor"')
-    .replace(/fill="#ffffff"/gi, 'fill="currentColor"')
-    .replace(/stroke="white"/gi, 'stroke="currentColor"');
+  const keep = /^(none|currentcolor|transparent|inherit)$/i;
+  return (
+    raw
+      // fill="…" / stroke="…" attributes, including url(#gradient) refs.
+      .replace(/(fill|stroke)="([^"]*)"/gi, (match, prop: string, value: string) =>
+        keep.test(value.trim()) ? match : `${prop}="currentColor"`,
+      )
+      // `fill: #999` / `stroke:url(#…)` inside style="" attributes and <style> blocks.
+      .replace(
+        /(fill|stroke)\s*:\s*([^;"'}]+)/gi,
+        (match, prop: string, value: string) =>
+          keep.test(value.trim()) ? match : `${prop}:currentColor`,
+      )
+  );
+}
+
+/**
+ * Ink used on a tile of `hex`. Brands span pure black (OpenAI, Cursor) to
+ * near-fluorescent green (Codebuff), so the glyph color is derived from the
+ * tile's relative luminance instead of being hard-coded to white.
+ */
+function inkFor(hex: string): string {
+  const value = hex.replace("#", "");
+  const full =
+    value.length === 3
+      ? value
+          .split("")
+          .map((char) => char + char)
+          .join("")
+      : value;
+  const channel = (offset: number) => {
+    const srgb = parseInt(full.slice(offset, offset + 2), 16) / 255;
+    return srgb <= 0.04045 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance =
+    0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+  return luminance > 0.45 ? "#141210" : "#ffffff";
 }
 
 export interface ProviderIcon {
   /** CLI-style provider id (lowercase, normalized). */
   id: string;
-  /** Brand hex color. */
+  /** Brand hex color — the badge tile fill. */
   brandColor: string;
   /** Single-character fallback used when no SVG is available. */
   fallbackLetter: string;
   /** Raw SVG markup when the provider ships a brand asset. */
   svgPath?: string;
+  /**
+   * Optional CSS `background-image` painted over `brandColor`. Reserved for
+   * the handful of brands whose mark is a gradient (Gemini) rather than a
+   * flat swatch; `brandColor` stays a plain hex so `color-mix()` still works.
+   */
+  tileImage?: string;
+  /** Explicit glyph color; defaults to the contrast pick for `brandColor`. */
+  glyphColor?: string;
 }
 
 const RAW: Record<string, string> = {
@@ -153,51 +199,60 @@ const RAW: Record<string, string> = {
  */
 export const PROVIDER_ICON_REGISTRY: Record<string, ProviderIcon> = {
   alibaba:     { id: "alibaba",     brandColor: "#ff6a00", fallbackLetter: "阿", svgPath: RAW.alibaba },
-  alibabatokenplan: { id: "alibabatokenplan", brandColor: "#ff6a00", fallbackLetter: "阿", svgPath: RAW.alibaba },
+  // The token plan is Qwen/Tongyi, not Alibaba Cloud: same mark, Qwen violet.
+  alibabatokenplan: { id: "alibabatokenplan", brandColor: "#615ced", fallbackLetter: "Q", svgPath: RAW.alibaba },
   amp:         { id: "amp",         brandColor: "#dc2626", fallbackLetter: "⚡", svgPath: RAW.amp },
   antigravity: { id: "antigravity", brandColor: "#60ba7e", fallbackLetter: "◉", svgPath: RAW.antigravity },
   augment:     { id: "augment",     brandColor: "#6366f1", fallbackLetter: "A", svgPath: RAW.augment },
-  claude:      { id: "claude",      brandColor: "#cc7c5e", fallbackLetter: "◈", svgPath: RAW.claude },
+  claude:      { id: "claude",      brandColor: "#d97757", fallbackLetter: "◈", svgPath: RAW.claude },
   codebuff:    { id: "codebuff",    brandColor: "#44ff00", fallbackLetter: "B", svgPath: RAW.codebuff },
-  codex:       { id: "codex",       brandColor: "#49a3b0", fallbackLetter: "◆", svgPath: RAW.codex },
-  copilot:     { id: "copilot",     brandColor: "#a855f7", fallbackLetter: "⬡", svgPath: RAW.copilot },
-  cursor:      { id: "cursor",      brandColor: "#00bfa5", fallbackLetter: "▸", svgPath: RAW.cursor },
+  // OpenAI ships the flower as white-on-black; a teal tile read as a stranger.
+  codex:       { id: "codex",       brandColor: "#0d0d0d", fallbackLetter: "◆", svgPath: RAW.codex },
+  copilot:     { id: "copilot",     brandColor: "#24292f", fallbackLetter: "⬡", svgPath: RAW.copilot },
+  cursor:      { id: "cursor",      brandColor: "#0d0d0d", fallbackLetter: "▸", svgPath: RAW.cursor },
   deepgram:    { id: "deepgram",    brandColor: "#13ef93", fallbackLetter: "D", svgPath: RAW.deepgram },
   deepinfra:   { id: "deepinfra",   brandColor: "#2a3275", fallbackLetter: "D", svgPath: RAW.deepinfra },
   aiand:       { id: "aiand",       brandColor: "#e25c2b", fallbackLetter: "&", svgPath: RAW.aiand },
   clinepass:   { id: "clinepass",   brandColor: "#61a3fa", fallbackLetter: "C", svgPath: RAW.clinepass },
   longcat:     { id: "longcat",     brandColor: "#ffd100", fallbackLetter: "L", svgPath: RAW.longcat },
   neuralwatt:  { id: "neuralwatt",  brandColor: "#38d98c", fallbackLetter: "N", svgPath: RAW.neuralwatt },
-  zoommate:    { id: "zoommate",    brandColor: "#0B5CFF", fallbackLetter: "Z", svgPath: RAW.zoommate },
+  zoommate:    { id: "zoommate",    brandColor: "#0b5cff", fallbackLetter: "Z", svgPath: RAW.zoommate },
   zenmux:      { id: "zenmux",      brandColor: "#6c5ce7", fallbackLetter: "Z", svgPath: RAW.zenmux },
-  deepseek:    { id: "deepseek",    brandColor: "#527df0", fallbackLetter: "D", svgPath: RAW.deepseek },
-  elevenlabs:  { id: "elevenlabs",  brandColor: "#111827", fallbackLetter: "E", svgPath: RAW.elevenlabs },
+  deepseek:    { id: "deepseek",    brandColor: "#4d6bfe", fallbackLetter: "D", svgPath: RAW.deepseek },
+  elevenlabs:  { id: "elevenlabs",  brandColor: "#0d0d0d", fallbackLetter: "E", svgPath: RAW.elevenlabs },
   factory:     { id: "factory",     brandColor: "#ff6b35", fallbackLetter: "◎", svgPath: RAW.factory },
-  gemini:      { id: "gemini",      brandColor: "#ab87ea", fallbackLetter: "✦", svgPath: RAW.gemini },
-  grok:        { id: "grok",        brandColor: "#111827", fallbackLetter: "G", svgPath: RAW.grok },
+  gemini:      {
+    id: "gemini",
+    brandColor: "#6b7ce8",
+    tileImage: "linear-gradient(135deg, #4285f4 0%, #9b72cb 52%, #d96570 100%)",
+    glyphColor: "#ffffff",
+    fallbackLetter: "✦",
+    svgPath: RAW.gemini,
+  },
+  grok:        { id: "grok",        brandColor: "#0d0d0d", fallbackLetter: "G", svgPath: RAW.grok },
   groq:        { id: "groq",        brandColor: "#f55036", fallbackLetter: "G", svgPath: RAW.groq },
   jetbrains:   { id: "jetbrains",   brandColor: "#ff3399", fallbackLetter: "J", svgPath: RAW.jetbrains },
   kilo:        { id: "kilo",        brandColor: "#5d87ff", fallbackLetter: "K", svgPath: RAW.kilo },
   bedrock:     { id: "bedrock",     brandColor: "#ff9900", fallbackLetter: "B", svgPath: RAW.bedrock },
-  kimi:        { id: "kimi",        brandColor: "#fe603c", fallbackLetter: "☽", svgPath: RAW.kimi },
-  kimik2:      { id: "kimik2",      brandColor: "#4c00ff", fallbackLetter: "☽", svgPath: RAW.kimi },
+  kimi:        { id: "kimi",        brandColor: "#16161a", fallbackLetter: "☽", svgPath: RAW.kimi },
+  kimik2:      { id: "kimik2",      brandColor: "#16161a", fallbackLetter: "☽", svgPath: RAW.kimi },
   kiro:        { id: "kiro",        brandColor: "#ff9900", fallbackLetter: "K", svgPath: RAW.kiro },
   llmproxy:    { id: "llmproxy",    brandColor: "#4f46e5", fallbackLetter: "L", svgPath: RAW.llmproxy },
   minimax:     { id: "minimax",     brandColor: "#fe603c", fallbackLetter: "M", svgPath: RAW.minimax },
-  moonshot:    { id: "moonshot",    brandColor: "#6851ff", fallbackLetter: "M", svgPath: RAW.moonshot },
+  moonshot:    { id: "moonshot",    brandColor: "#16161a", fallbackLetter: "M", svgPath: RAW.moonshot },
   synthetic:   { id: "synthetic",   brandColor: "#00b7a8", fallbackLetter: "S", svgPath: RAW.synthetic },
   clawrouter:  { id: "clawrouter",  brandColor: "#ef4444", fallbackLetter: "C", svgPath: RAW.clawrouter },
-  mistral:     { id: "mistral",     brandColor: "#ff500f", fallbackLetter: "M", svgPath: RAW.mistral },
-  ollama:      { id: "ollama",      brandColor: "#8b95b0", fallbackLetter: "○", svgPath: RAW.ollama },
+  mistral:     { id: "mistral",     brandColor: "#fa520f", fallbackLetter: "M", svgPath: RAW.mistral },
+  ollama:      { id: "ollama",      brandColor: "#101010", fallbackLetter: "○", svgPath: RAW.ollama },
   azureopenai: { id: "azureopenai", brandColor: "#0078d4", fallbackLetter: "A" },
   t3chat:      { id: "t3chat",      brandColor: "#8b5cf6", fallbackLetter: "T", svgPath: RAW.t3chat },
   opencode:    { id: "opencode",    brandColor: "#3b82f6", fallbackLetter: "○", svgPath: RAW.opencode },
   opencodego:  { id: "opencodego",  brandColor: "#3b82f6", fallbackLetter: "○", svgPath: RAW.opencodego },
-  openrouter:  { id: "openrouter",  brandColor: "#6b7280", fallbackLetter: "R", svgPath: RAW.openrouter },
-  perplexity:  { id: "perplexity",  brandColor: "#1fb8cd", fallbackLetter: "P", svgPath: RAW.perplexity },
+  openrouter:  { id: "openrouter",  brandColor: "#6467f2", fallbackLetter: "R", svgPath: RAW.openrouter },
+  perplexity:  { id: "perplexity",  brandColor: "#20808d", fallbackLetter: "P", svgPath: RAW.perplexity },
   vertexai:    { id: "vertexai",    brandColor: "#4285f4", fallbackLetter: "△", svgPath: RAW.vertexai },
   warp:        { id: "warp",        brandColor: "#6366f1", fallbackLetter: "W", svgPath: RAW.warp },
-  windsurf:    { id: "windsurf",    brandColor: "#22c55e", fallbackLetter: "W", svgPath: RAW.windsurf },
+  windsurf:    { id: "windsurf",    brandColor: "#09b6a2", fallbackLetter: "W", svgPath: RAW.windsurf },
   wayfinder:   { id: "wayfinder",   brandColor: "#14b8a6", fallbackLetter: "W" },
   zai:         { id: "zai",         brandColor: "#e85a6a", fallbackLetter: "Z", svgPath: RAW.zai },
   // Aliases / Rust-side normalizations without their own SVG.
@@ -212,18 +267,18 @@ export const PROVIDER_ICON_REGISTRY: Record<string, ProviderIcon> = {
   crossmodel:  { id: "crossmodel",  brandColor: "#c084fc", fallbackLetter: "X", svgPath: RAW.crossmodel },
   qoder:       { id: "qoder",       brandColor: "#2563eb", fallbackLetter: "Q", svgPath: RAW.qoder },
   sakana:      { id: "sakana",      brandColor: "#0ea5e9", fallbackLetter: "S", svgPath: RAW.sakana },
-  stepfun:     { id: "stepfun",     brandColor: "#999999", fallbackLetter: "S", svgPath: RAW.stepfun },
+  stepfun:     { id: "stepfun",     brandColor: "#2c6bf2", fallbackLetter: "S", svgPath: RAW.stepfun },
   sub2api:     { id: "sub2api",     brandColor: "#2dc6d8", fallbackLetter: "S", svgPath: RAW.sub2api },
-  venice:      { id: "venice",      brandColor: "#111827", fallbackLetter: "V", svgPath: RAW.venice },
-  openai:      { id: "openai",      brandColor: "#10a37f", fallbackLetter: "O" },
+  venice:      { id: "venice",      brandColor: "#0d0d0d", fallbackLetter: "V", svgPath: RAW.venice },
+  openai:      { id: "openai",      brandColor: "#0d0d0d", fallbackLetter: "O", svgPath: RAW.codex },
   chutes:      { id: "chutes",      brandColor: "#ff5c35", fallbackLetter: "C" },
   litellm:     { id: "litellm",     brandColor: "#0ea5e9", fallbackLetter: "L" },
   poe:         { id: "poe",         brandColor: "#5d5fef", fallbackLetter: "P" },
   devin:       { id: "devin",       brandColor: "#111827", fallbackLetter: "D" },
   zed:         { id: "zed",         brandColor: "#084ccf", fallbackLetter: "Z" },
-  qwencloud:   { id: "qwencloud",   brandColor: "#615CED", fallbackLetter: "Q" },
-  notion:      { id: "notion",      brandColor: "#337EA9", fallbackLetter: "N", svgPath: RAW.notion },
-  xai:         { id: "xai",         brandColor: "#8e8e93", fallbackLetter: "X", svgPath: RAW.xai },
+  qwencloud:   { id: "qwencloud",   brandColor: "#615ced", fallbackLetter: "Q", svgPath: RAW.alibaba },
+  notion:      { id: "notion",      brandColor: "#0d0d0d", fallbackLetter: "N", svgPath: RAW.notion },
+  xai:         { id: "xai",         brandColor: "#0d0d0d", fallbackLetter: "X", svgPath: RAW.xai },
 };
 
 const ALIASES: Record<string, string> = {
@@ -326,4 +381,22 @@ export function getProviderIcon(id: string): ProviderIcon {
       fallbackLetter: id.charAt(0).toUpperCase() || "●",
     }
   );
+}
+
+/**
+ * Inline custom properties for a brand badge tile. Every surface that paints a
+ * provider chip — tray cards, the tray footer switcher, the settings provider
+ * list, the float bar — spreads this onto the tile element so the fill, the
+ * glyph ink and the dark-theme lift stay defined in exactly one place.
+ */
+export function providerTileStyle(id: string): Record<string, string> {
+  const entry = getProviderIcon(id);
+  const style: Record<string, string> = {
+    "--provider-tile": entry.brandColor,
+    "--provider-glyph": entry.glyphColor ?? inkFor(entry.brandColor),
+  };
+  if (entry.tileImage) {
+    style["--provider-tile-image"] = entry.tileImage;
+  }
+  return style;
 }

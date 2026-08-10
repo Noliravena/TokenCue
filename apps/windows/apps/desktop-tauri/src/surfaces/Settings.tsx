@@ -18,12 +18,13 @@ import AboutTab from "./settings/tabs/AboutTab";
 import ProvidersTab from "./settings/tabs/ProvidersTab";
 import UsageSpendTab from "./settings/tabs/UsageSpendTab";
 import { BrandMark } from "../components/BrandMark";
+import { WinGlyph } from "../components/WindowControls";
 
 // Inline monochrome SVG icons stand in for the upstream macOS SF Symbols
 // (gearshape / square.grid.2x2 / eye / slider.horizontal.3 / info.circle).
 // They render in `currentColor` so they pick up the same secondary/accent
 // text color as the tab label.
-const ICON_SIZE = 16;
+const ICON_SIZE = 15;
 
 function Svg({ children }: { children: ReactNode }) {
   return (
@@ -101,8 +102,13 @@ const TabIcons: Record<SettingsTabId, ReactElement> = {
 };
 
 
-const SETTINGS_WINDOW_HEIGHT = 620;
-const SETTINGS_WINDOW_WIDTH = 880;
+// Keep in step with `SETTINGS_WIDTH`/`SETTINGS_HEIGHT` in
+// `src-tauri/src/shell/settings_window.rs` and with the
+// `--tb-settings-width` / `--tb-settings-height` overrides in tokencue.css.
+// They disagreed before (Rust opened 720x580, this resized it to 880x620),
+// so the window visibly jumped on open.
+const SETTINGS_WINDOW_HEIGHT = 580;
+const SETTINGS_WINDOW_WIDTH = 720;
 
 async function applySettingsWindowSize() {
   const workArea = await getWorkAreaRect().catch(() => null);
@@ -185,34 +191,33 @@ export default function Settings({ state, initialTab: propTab }: { state: Bootst
     <div
       className={`settings${activeTab === "providers" ? " settings--providers-active" : ""}`}
     >
-      {/* custom title bar (decorations disabled for guaranteed theme) */}
+      {/* Custom title bar: native decorations are off so the warm theme
+          survives, so this row is the real caption. It follows the Windows
+          convention — title left, caption buttons flush right — instead of
+          the macOS traffic lights the surface used to carry. */}
       <div className="settings-titlebar" data-tauri-drag-region>
-        <span className="settings-titlebar__traffic" aria-hidden>
-          <span />
-          <span />
-        </span>
         <span className="settings-titlebar__title" data-tauri-drag-region>
-          <BrandMark size={20} />
+          <BrandMark size={16} />
           {t("SettingsWindowTitle")}
         </span>
         <div className="settings-titlebar__controls">
           <button
             type="button"
-            className="settings-titlebar__control settings-titlebar__control--minimize"
+            className="win-caption-btn"
             onClick={() => void getCurrentWindow().minimize()}
             aria-label={t("WindowMinimize")}
             title={t("WindowMinimize")}
-          />
+          >
+            <WinGlyph kind="minimize" />
+          </button>
           <button
             type="button"
-            className="settings-titlebar__control settings-titlebar__control--close"
+            className="win-caption-btn win-caption-btn--close"
             onClick={() => void closeSettingsWindow()}
             aria-label={t("WindowClose")}
             title={t("WindowClose")}
           >
-            <svg aria-hidden viewBox="0 0 16 16" focusable="false">
-              <path d="M4.5 4.5l7 7M11.5 4.5l-7 7" />
-            </svg>
+            <WinGlyph kind="close" />
           </button>
         </div>
       </div>

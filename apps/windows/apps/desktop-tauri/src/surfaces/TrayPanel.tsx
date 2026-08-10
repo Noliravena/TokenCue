@@ -37,10 +37,11 @@ import {
 } from "../lib/trayHistory";
 import { languageTag } from "../i18n/languageTag";
 import { ProviderIcon } from "../components/providers/ProviderIcon";
-import { getProviderIcon } from "../components/providers/providerIcons";
+import { providerTileStyle } from "../components/providers/providerIcons";
 import { Toggle } from "../components/FormControls";
 import type { LocaleKey } from "../i18n/keys";
 import { BrandMark } from "../components/BrandMark";
+import { WinGlyph } from "../components/WindowControls";
 import { EmptyProviderPanel } from "../components/EmptyProviderPanel";
 
 type Translate = (key: LocaleKey) => string;
@@ -663,7 +664,6 @@ function QuotaCard({
   const used = Math.max(0, Math.min(100, provider.primary.usedPercent));
   const shown = displayPercent(used, settings.showAsUsed);
   const stale = isStale(provider, settings.refreshIntervalSecs);
-  const brand = getProviderIcon(provider.providerId).brandColor;
   const className = [
     "tokencue-tray__card",
     stale ? "tokencue-tray__card--stale" : "",
@@ -679,8 +679,8 @@ function QuotaCard({
       <article className={className} id={quotaCardId(provider.providerId)}>
         <div className="tokencue-tray__card-head">
           <span
-            className="tokencue-tray__brand-icon"
-            style={{ background: brand }}
+            className="provider-tile tokencue-tray__brand-icon"
+            style={providerTileStyle(provider.providerId)}
           >
             <ProviderIcon providerId={provider.providerId} size={19} />
           </span>
@@ -701,7 +701,10 @@ function QuotaCard({
   return (
     <article className={className} id={quotaCardId(provider.providerId)}>
       <div className="tokencue-tray__card-head">
-        <span className="tokencue-tray__brand-icon" style={{ background: brand }}>
+        <span
+          className="provider-tile tokencue-tray__brand-icon"
+          style={providerTileStyle(provider.providerId)}
+        >
           <ProviderIcon providerId={provider.providerId} size={19} />
         </span>
         <span className="tokencue-tray__card-meta">
@@ -892,10 +895,12 @@ function SpendTab({
 
       <article className="tokencue-tray__card tokencue-tray__card--list">
         {rows.map((row) => {
-          const brand = getProviderIcon(row.providerId).brandColor;
           return (
             <div key={row.providerId} className="tokencue-tray__list-row">
-              <span className="tokencue-tray__brand-icon tokencue-tray__brand-icon--sm" style={{ background: brand }}>
+              <span
+                className="provider-tile tokencue-tray__brand-icon tokencue-tray__brand-icon--sm"
+                style={providerTileStyle(row.providerId)}
+              >
                 <ProviderIcon providerId={row.providerId} size={15} />
               </span>
               <span className="tokencue-tray__list-name">{row.displayName}</span>
@@ -1060,10 +1065,10 @@ function HistoryTab({
         <article className="tokencue-tray__card tokencue-tray__card--stack">
           <div className="tokencue-tray__history-head">
             <span
-              className="tokencue-tray__brand-icon tokencue-tray__brand-icon--sm"
-              style={{ background: getProviderIcon(activeProvider.providerId).brandColor }}
+              className="provider-tile tokencue-tray__brand-icon tokencue-tray__brand-icon--sm"
+              style={providerTileStyle(activeProvider.providerId)}
             >
-              <ProviderIcon providerId={activeProvider.providerId} size={13} />
+              <ProviderIcon providerId={activeProvider.providerId} size={15} />
             </span>
             {chartable.length > 1 ? (
               <select
@@ -1469,20 +1474,20 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
         style={{ "--tray-scale": trayScale } as CSSProperties}
       >
         <header className="tokencue-tray__header">
-          <div className="tokencue-tray__traffic">
-            <button
-              type="button"
-              className="tokencue-tray__traffic-close"
-              aria-label={t("WindowClose")}
-              title={t("WindowClose")}
-              onClick={closeFlyout}
-            />
-            <span aria-hidden />
-          </div>
           <div className="tokencue-tray__brand">
-            <BrandMark className="tokencue-tray__logo" size={22} />
+            <BrandMark className="tokencue-tray__logo" size={18} />
             <strong>TokenCue</strong>
           </div>
+          <span className="tokencue-tray__updated tokencue-tray__mono">{updated}</span>
+          <button
+            type="button"
+            className="win-caption-btn win-caption-btn--close tokencue-tray__close"
+            aria-label={t("WindowClose")}
+            title={t("WindowClose")}
+            onClick={closeFlyout}
+          >
+            <WinGlyph kind="close" />
+          </button>
         </header>
 
         <nav className="tokencue-tray__tabs" role="tablist" aria-label="Tray">
@@ -1514,55 +1519,49 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
         </div>
 
         <footer className="tokencue-tray__footer">
-          <button
-            type="button"
-            className="tokencue-tray__footer-btn"
-            aria-label={t("WindowClose")}
-            title={t("WindowClose")}
-            onClick={closeFlyout}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-              aria-hidden
-            >
-              <path d="M13 8H5.5M8.5 4.5 5 8l3.5 3.5M13 3v10" />
-            </svg>
-          </button>
-
           {settings.switcherShowsIcons && sorted.length > 0 ? (
             <div className="tokencue-tray__switcher">
               {sorted.slice(0, SWITCHER_LIMIT).map((provider) => (
                 <button
                   key={provider.providerId}
                   type="button"
-                  className="tokencue-tray__switcher-btn"
-                  style={{ background: getProviderIcon(provider.providerId).brandColor }}
+                  className={`provider-tile tokencue-tray__switcher-btn${
+                    expandedProviderId === provider.providerId ? " is-active" : ""
+                  }`}
+                  style={providerTileStyle(provider.providerId)}
                   aria-label={provider.displayName}
                   title={provider.displayName}
                   onClick={() => focusProvider(provider.providerId)}
                 >
-                  <ProviderIcon providerId={provider.providerId} size={14} />
+                  <ProviderIcon providerId={provider.providerId} size={15} />
                 </button>
               ))}
             </div>
           ) : (
-            <span className="tokencue-tray__updated">{updated}</span>
+            <span className="tokencue-tray__footer-spacer" aria-hidden />
           )}
 
           <button
             type="button"
-            className={`tokencue-tray__kbd${isRefreshing ? " is-refreshing" : ""}`}
+            className={`tokencue-tray__footer-btn${isRefreshing ? " is-refreshing" : ""}`}
             aria-label={t("ActionRefresh")}
-            title={t("ActionRefresh")}
+            title={`${t("ActionRefresh")} · Ctrl+R`}
             onClick={refresh}
           >
-            Ctrl R
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden
+            >
+              <path d="M13.2 6.6A5.4 5.4 0 1 0 13.5 10" />
+              <path d="M13.5 2.8v3.9h-3.9" />
+            </svg>
           </button>
           <button
             type="button"
@@ -1572,8 +1571,8 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
             onClick={openSettings}
           >
             <svg
-              width="16"
-              height="16"
+              width="15"
+              height="15"
               viewBox="0 0 16 16"
               fill="none"
               stroke="currentColor"

@@ -36,6 +36,27 @@ export function Toggle({
   return input;
 }
 
+/**
+ * A collapsed `<select>` sizes to its widest option, which in this settings
+ * sheet means one row can be three times the width of its neighbours. The
+ * control is sized to the *selected* label instead — which means measuring
+ * it, and a CJK glyph is roughly twice a Latin one at the same size. Getting
+ * that wrong is what clipped "自适应" down to "自适".
+ */
+const FULL_WIDTH_GLYPH =
+  /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/;
+
+/** Padding, border and chevron the pill adds around the label text. */
+const SELECT_CHROME = 40;
+
+function labelWidth(text: string): number {
+  let width = 0;
+  for (const glyph of text) {
+    width += FULL_WIDTH_GLYPH.test(glyph) ? 12 : 6.8;
+  }
+  return Math.ceil(width);
+}
+
 export function Select({
   value,
   options,
@@ -53,8 +74,8 @@ export function Select({
 }) {
   const selectedLabel = options.find((option) => option.value === value)?.label ?? value;
   const calculatedWidth = Math.min(
-    128,
-    Math.max(48, Math.ceil((selectedLabel ?? "").length * 6.8) + 18),
+    168,
+    Math.max(56, labelWidth(selectedLabel ?? "") + SELECT_CHROME),
   );
   const width = Math.max(calculatedWidth, minWidth ?? 0);
 

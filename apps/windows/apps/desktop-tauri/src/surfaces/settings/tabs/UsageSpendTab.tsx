@@ -5,7 +5,7 @@ import type { UsageSpendRow, UsageSpendSummary } from "../../../types/bridge";
 import type { TabProps } from "../settingsTabs";
 import { languageTag } from "../../../i18n/languageTag";
 import { ProviderIcon } from "../../../components/providers/ProviderIcon";
-import { getProviderIcon } from "../../../components/providers/providerIcons";
+import { providerTileStyle } from "../../../components/providers/providerIcons";
 
 const currencyFormatters = new Map<string, Intl.NumberFormat>();
 
@@ -281,8 +281,8 @@ export default function UsageSpendTab(_props: TabProps) {
                 <td>
                   <span className="usage-spend-table__provider">
                     <span
-                      className="usage-spend-table__brand"
-                      style={{ background: getProviderIcon(row.providerId).brandColor }}
+                      className="provider-tile usage-spend-table__brand"
+                      style={providerTileStyle(row.providerId)}
                     >
                       <ProviderIcon providerId={row.providerId} size={14} />
                     </span>

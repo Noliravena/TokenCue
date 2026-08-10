@@ -88,6 +88,55 @@ select:focus-visible {
   outline-offset: 2px;
 }
 
+/* ── Windows caption buttons ───────────────────────────────────────────
+   Native decorations are disabled so the warm theme survives, which means
+   the app owns the caption buttons. Windows 11 metrics: a 46px-wide hit
+   target, a square (never rounded) hover plate, and the system close red. */
+.win-caption-btn {
+  -webkit-app-region: no-drag;
+  display: grid;
+  width: 46px;
+  min-width: 46px;
+  height: 100%;
+  min-height: 30px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--tb-text-secondary);
+  cursor: pointer;
+  transition: background-color 90ms linear, color 90ms linear;
+}
+
+.win-caption-btn:hover {
+  background: color-mix(in srgb, var(--tb-text) 9%, transparent);
+  color: var(--tb-text);
+}
+
+.win-caption-btn:active {
+  background: color-mix(in srgb, var(--tb-text) 5%, transparent);
+}
+
+.win-caption-btn--close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.win-caption-btn--close:active {
+  background: #b0271a;
+  color: #ffffffd9;
+}
+
+.win-caption-btn:focus-visible {
+  outline: 2px solid var(--tb-color-accent);
+  outline-offset: -3px;
+}
+
+.win-caption-glyph {
+  display: block;
+}
+
 /* Warm tray: 380px panel with card quota + top tabs. */
 .tokencue-tray {
   display: flex;
@@ -114,104 +163,72 @@ select:focus-visible {
   cursor: pointer;
 }
 
+/* Title row: brand on the left, freshness in the middle, one Windows close
+   button hard against the right edge. (Was a centered wordmark with macOS
+   traffic lights on the left — the wrong platform's furniture.) */
 .tokencue-tray__header {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 16px 18px 12px;
-}
-
-.tokencue-tray__traffic {
-  position: absolute;
-  left: 16px;
-  display: flex;
-  gap: 10px;
-}
-
-.tokencue-tray__traffic span,
-.tokencue-tray .tokencue-tray__traffic-close {
-  width: 11px;
-  height: 11px;
-  flex: 0 0 11px;
-  padding: 0;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--tb-text) 16%, transparent);
-}
-
-.tokencue-tray .tokencue-tray__traffic-close {
-  position: relative;
-  transition: background-color 120ms ease, transform 120ms ease;
-}
-
-.tokencue-tray .tokencue-tray__traffic-close:hover {
-  background: #cf6458;
-  transform: scale(1.08);
-}
-
-.tokencue-tray .tokencue-tray__traffic-close::before,
-.tokencue-tray .tokencue-tray__traffic-close::after {
-  position: absolute;
-  top: 5px;
-  left: 2.5px;
-  width: 6px;
-  height: 1px;
-  border-radius: 1px;
-  background: color-mix(in srgb, #201a15 76%, transparent);
-  content: "";
-  opacity: 0;
-  transform: rotate(45deg);
-  transition: opacity 120ms ease;
-}
-
-.tokencue-tray .tokencue-tray__traffic-close::after {
-  transform: rotate(-45deg);
-}
-
-.tokencue-tray .tokencue-tray__traffic-close:hover::before,
-.tokencue-tray .tokencue-tray__traffic-close:hover::after,
-.tokencue-tray .tokencue-tray__traffic-close:focus-visible::before,
-.tokencue-tray .tokencue-tray__traffic-close:focus-visible::after {
-  opacity: 1;
+  gap: 8px;
+  height: 34px;
+  padding: 0 0 0 12px;
 }
 
 .tokencue-tray__brand {
   display: flex;
+  min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .tokencue-tray__logo {
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   display: block;
 }
 
 .tokencue-tray__header strong {
   font-family: var(--tb-type-display-family);
-  font-size: 20px;
+  font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+.tokencue-tray__header .tokencue-tray__updated {
+  flex: 1;
+  color: var(--tb-muted);
+  font-size: 10.5px;
+  text-align: right;
+}
+
+.tokencue-tray .tokencue-tray__close {
+  border-top-right-radius: var(--tb-tray-radius);
 }
 
 .tokencue-tray__tabs {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 2px;
-  padding: 0 10px 10px;
+  padding: 2px 8px 8px;
 }
 
 .tokencue-tray__tab {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 9px 4px 8px;
+  gap: 3px;
+  padding: 6px 4px 5px;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 8px;
   color: var(--tb-text-secondary);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
+}
+
+.tokencue-tray__tab svg {
+  width: 15px;
+  height: 15px;
 }
 
 .tokencue-tray__tab:hover {
@@ -237,15 +254,15 @@ select:focus-visible {
 .tokencue-tray__body {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 6px 14px 18px;
+  gap: 7px;
+  padding: 2px 10px 12px;
 }
 
 .tokencue-tray__card {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 14px 15px 15px;
+  gap: 8px;
+  padding: 10px 11px 11px;
   border: 1px solid var(--tb-border);
   border-radius: var(--tb-card-radius);
   background: var(--tb-surface-raised);
@@ -258,7 +275,7 @@ select:focus-visible {
 }
 
 .tokencue-tray__card--stack {
-  gap: 13px;
+  gap: 9px;
 }
 
 .tokencue-tray__card--stale {
@@ -272,32 +289,61 @@ select:focus-visible {
 .tokencue-tray__card-head {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 9px;
+}
+
+/* ── Provider brand tile ───────────────────────────────────────────────
+   One badge treatment for every surface: the brand swatch fills the tile,
+   the mark is flattened to a single ink chosen for contrast against it, and
+   a hairline ring keeps near-black tiles (OpenAI, Cursor, Kimi) from melting
+   into the dark canvas. Sizes and corner radii stay with the call site. */
+.provider-tile {
+  display: grid;
+  flex: none;
+  place-items: center;
+  overflow: hidden;
+  background-size: cover;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 15%, transparent);
+}
+
+/* Paint is scoped through `:root` on purpose: the switcher tiles are buttons,
+   and `.tokencue-tray button { background: transparent; color: inherit }` is
+   the more specific selector, which drained the brand out of the whole footer
+   row. This keeps the tile winning without an `!important`. */
+:root .provider-tile {
+  background-color: var(--provider-tile, var(--tb-chip-bg));
+  background-image: var(--provider-tile-image, none);
+  color: var(--provider-glyph, #fff);
+}
+
+/* Flat swatches read a touch heavy against the warm dark canvas; lift them
+   just enough that the tile edge stays legible without losing the brand. */
+:root[data-theme="dark"] .provider-tile {
+  background-color: color-mix(in srgb, var(--provider-tile, #000) 90%, #ffffff);
+}
+
+.provider-tile .provider-icon {
+  background: transparent !important;
+  box-shadow: none !important;
+  color: inherit !important;
+}
+
+.provider-tile .provider-icon svg {
+  width: 100%;
+  height: 100%;
+  filter: none;
 }
 
 .tokencue-tray__brand-icon {
-  width: 32px;
-  height: 32px;
-  flex: none;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  overflow: hidden;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
 }
 
 .tokencue-tray__brand-icon--sm {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
-}
-
-.tokencue-tray__brand-icon .provider-icon {
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.tokencue-tray__brand-icon .provider-icon svg {
-  filter: brightness(0) invert(1);
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
 }
 
 .tokencue-tray__card-meta {
@@ -309,13 +355,15 @@ select:focus-visible {
 }
 
 .tokencue-tray__card-name {
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 600;
+  line-height: 1.25;
 }
 
 .tokencue-tray__card-sub {
   color: var(--tb-muted);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.3;
 }
 
 .tokencue-tray__card-sub--error {
@@ -331,7 +379,7 @@ select:focus-visible {
 
 .tokencue-tray__card-pct-num {
   font-family: var(--tb-type-display-family);
-  font-size: 26px;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -348,7 +396,7 @@ select:focus-visible {
 .tokencue-tray__card-pct-unit {
   margin-left: 1px;
   color: var(--tb-muted);
-  font-size: 15px;
+  font-size: 12px;
 }
 
 .tokencue-tray__card-pct-label {
@@ -384,7 +432,7 @@ select:focus-visible {
 
 .tokencue-tray__track {
   display: block;
-  height: 7px;
+  height: 5px;
   overflow: hidden;
   border-radius: 999px;
   background: var(--tb-track);
@@ -408,18 +456,18 @@ select:focus-visible {
 .tokencue-tray__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 5px;
 }
 
 .tokencue-tray__chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 9px;
+  gap: 5px;
+  padding: 2px 8px;
   border-radius: 999px;
   background: var(--tb-chip-bg);
   color: var(--tb-text-secondary);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
 }
 
@@ -444,21 +492,21 @@ select:focus-visible {
 
 .tokencue-tray__display-num {
   display: block;
-  margin-top: 4px;
+  margin-top: 3px;
   font-family: var(--tb-type-display-family);
-  font-size: 34px;
+  font-size: 26px;
   font-weight: 600;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
 .tokencue-tray__display-num--sm {
-  font-size: 22px;
+  font-size: 18px;
   color: var(--tb-text-secondary);
 }
 
 .tokencue-tray__display-num--multi {
-  font-size: 15px;
+  font-size: 13px;
   line-height: 1.25;
 }
 
@@ -476,8 +524,8 @@ select:focus-visible {
 .tokencue-tray__bars {
   display: flex;
   align-items: flex-end;
-  gap: 5px;
-  height: 56px;
+  gap: 4px;
+  height: 44px;
 }
 
 .tokencue-tray__bar {
@@ -501,9 +549,9 @@ select:focus-visible {
 .tokencue-tray__event {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 9px;
   width: 100%;
-  padding: 12px 15px;
+  padding: 8px 11px;
   border-bottom: 1px solid color-mix(in srgb, var(--tb-text) 6%, transparent);
   text-align: left;
 }
@@ -519,7 +567,7 @@ select:focus-visible {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  font-size: 14px;
+  font-size: 12.5px;
   font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -527,13 +575,13 @@ select:focus-visible {
 
 .tokencue-tray__list-meta {
   color: var(--tb-muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .tokencue-tray__list-value {
   flex: none;
-  min-width: 56px;
-  font-size: 14px;
+  min-width: 52px;
+  font-size: 12.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -557,18 +605,19 @@ select:focus-visible {
 }
 
 .tokencue-tray__setting-title {
-  font-size: 14px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .tokencue-tray__setting-help,
 .tokencue-tray__event-detail {
   color: var(--tb-muted);
-  font-size: 11.5px;
+  font-size: 10.5px;
+  line-height: 1.35;
 }
 
 .tokencue-tray__event-title {
-  font-size: 13.5px;
+  font-size: 12.5px;
   font-weight: 500;
 }
 
@@ -589,12 +638,12 @@ select:focus-visible {
 }
 
 .tokencue-tray__link-icon {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex: none;
   display: grid;
   place-items: center;
-  border-radius: 9px;
+  border-radius: 7px;
   background: var(--tone-bg);
   color: var(--tone-fg);
 }
@@ -645,12 +694,12 @@ select:focus-visible {
 .tokencue-tray__link-value {
   flex: none;
   color: var(--tb-muted);
-  font-size: 12.5px;
+  font-size: 11.5px;
 }
 
 .tokencue-tray__chevron {
   color: var(--tb-muted);
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .tokencue-tray__history-head {
@@ -661,17 +710,17 @@ select:focus-visible {
 
 .tokencue-tray__history-head strong {
   flex: 1;
-  font-size: 14px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .tokencue-tray__spark {
-  height: 78px;
+  height: 62px;
 }
 
 .tokencue-tray__spark svg {
   width: 100%;
-  height: 78px;
+  height: 62px;
   display: block;
 }
 
@@ -695,36 +744,36 @@ select:focus-visible {
 }
 
 .tokencue-tray__hint {
-  margin: 2px 2px 0;
+  margin: 1px 2px 0;
   color: var(--tb-muted);
-  font-size: 12px;
-  line-height: 1.6;
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .tokencue-tray__cta,
 .tokencue-tray__pill-btn {
-  height: 40px;
-  padding: 0 16px;
+  height: 32px;
+  padding: 0 14px;
   border: 1px solid color-mix(in srgb, var(--tb-text) 12%, transparent) !important;
   border-radius: 999px;
   background: var(--tb-surface) !important;
   color: var(--tb-text) !important;
-  font-size: 13.5px;
+  font-size: 12.5px;
   font-weight: 600;
 }
 
 .tokencue-tray__pill-btn {
   height: auto;
-  padding: 6px 12px;
-  font-size: 12px;
+  padding: 5px 11px;
+  font-size: 11.5px;
 }
 
 .tokencue-tray__footer {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin-top: auto;
-  padding: 12px 16px;
+  padding: 7px 10px;
   border-top: 1px solid color-mix(in srgb, var(--tb-text) 7%, transparent);
   background: var(--tb-footer-bg);
   color: var(--tb-text-secondary);
@@ -733,21 +782,29 @@ select:focus-visible {
 
 .tokencue-tray__footer-btn {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
+  flex: none;
   place-items: center;
-  border-radius: 9px;
+  border-radius: 7px;
   color: var(--tb-text-secondary);
+}
+
+.tokencue-tray__footer-btn:hover {
+  background: color-mix(in srgb, var(--tb-text) 7%, transparent);
+}
+
+.tokencue-tray__footer-spacer {
+  flex: 1;
 }
 
 .tokencue-tray__footer button:hover {
   color: var(--tb-text);
 }
 
-/* Refresh lives on the shortcut chip, so signal work with a pulse — a
-   spinning text label just reads as a rendering glitch. */
-.tokencue-tray__kbd.is-refreshing {
-  border-color: color-mix(in srgb, var(--tb-color-accent) 45%, transparent);
+/* Signal an in-flight refresh by pulsing the button rather than spinning a
+   label — a rotating glyph at 15px just reads as a rendering glitch. */
+.tokencue-tray__footer-btn.is-refreshing {
   color: var(--tb-color-accent);
   animation: tokencue-tray-pulse 900ms ease-in-out infinite;
 }
@@ -755,31 +812,34 @@ select:focus-visible {
 /* Provider switcher: brand tiles that jump back to that quota card. */
 .tokencue-tray__switcher {
   display: flex;
-  gap: 6px;
-  margin: 0 auto;
+  flex: 1;
+  min-width: 0;
+  flex-wrap: nowrap;
+  gap: 5px;
 }
 
 .tokencue-tray__switcher-btn {
-  display: grid;
   width: 24px;
   height: 24px;
-  place-items: center;
-  border-radius: 8px;
-  overflow: hidden;
-  transition: transform 120ms ease;
+  padding: 0;
+  border-radius: 7px;
+  transition: transform 120ms ease, box-shadow 120ms ease;
 }
 
 .tokencue-tray__switcher-btn:hover {
   transform: translateY(-1px);
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, currentColor 30%, transparent),
+    0 2px 6px rgba(0, 0, 0, 0.28);
 }
 
-.tokencue-tray__switcher-btn .provider-icon {
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.tokencue-tray__switcher-btn .provider-icon svg {
-  filter: brightness(0) invert(1);
+/* The tile the footer switcher points at gets a ring in the accent so the
+   quota card currently in view is identifiable without a text label. */
+.tokencue-tray__switcher-btn.is-active {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, currentColor 32%, transparent),
+    0 0 0 2px var(--tb-footer-bg),
+    0 0 0 3.5px var(--tb-color-accent);
 }
 
 .tokencue-tray__updated {
@@ -789,17 +849,6 @@ select:focus-visible {
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.tokencue-tray__kbd {
-  flex: none;
-  padding: 4px 10px;
-  border: 1px solid color-mix(in srgb, var(--tb-text) 12%, transparent);
-  border-radius: 8px;
-  background: var(--tb-surface-raised);
-  font-family: var(--tb-type-mono-family);
-  font-size: 11px;
-  color: var(--tb-text-secondary);
 }
 
 .tokencue-tray__empty {
@@ -855,7 +904,7 @@ select:focus-visible {
 .tokencue-tray__details {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 6px;
   padding-top: 2px;
   border-top: 1px solid color-mix(in srgb, var(--tb-text) 7%, transparent);
 }
@@ -863,20 +912,20 @@ select:focus-visible {
 .tokencue-tray__detail-section {
   display: flex;
   flex-direction: column;
-  gap: 9px;
-  padding: 10px 11px;
-  border-radius: 12px;
+  gap: 6px;
+  padding: 7px 9px;
+  border-radius: 8px;
   background: color-mix(in srgb, var(--tb-text) 3%, transparent);
 }
 
 .tokencue-tray__metric {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 4px;
 }
 
 .tokencue-tray__metric + .tokencue-tray__metric {
-  padding-top: 9px;
+  padding-top: 6px;
   border-top: 1px solid color-mix(in srgb, var(--tb-text) 6%, transparent);
 }
 
@@ -887,7 +936,7 @@ select:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .tokencue-tray__metric-head > span,
@@ -898,7 +947,7 @@ select:focus-visible {
 
 .tokencue-tray__metric-head strong,
 .tokencue-tray__pace-head strong {
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 600;
   text-align: right;
 }
@@ -924,7 +973,7 @@ select:focus-visible {
 .tokencue-tray__detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px 14px;
+  gap: 6px 12px;
 }
 
 .tokencue-tray__detail-grid > span {
@@ -936,12 +985,12 @@ select:focus-visible {
 
 .tokencue-tray__detail-grid small {
   color: var(--tb-muted);
-  font-size: 10.5px;
+  font-size: 10px;
 }
 
 .tokencue-tray__detail-grid strong {
   overflow: hidden;
-  font-size: 12.5px;
+  font-size: 11.5px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
@@ -1108,12 +1157,24 @@ select:focus-visible {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tokencue-tray__kbd.is-refreshing {
+  .tokencue-tray__footer-btn.is-refreshing {
     animation: none;
   }
 }
 
-/* Settings: top icon tabs + warm cards (overrides styles.css left-rail). */
+/* ── Settings dialog ───────────────────────────────────────────────────
+   Windows override of the shared geometry token: the 880x620 sheet in
+   `shared/design/tokens.json` is sized for the macOS window and left every
+   settings row stretched across a half-empty canvas here. The dialog is
+   narrower and denser so a row's label and its control stay in one glance.
+   macOS keeps the shared value. */
+:root {
+  --tb-settings-width: 720px;
+  --tb-settings-height: 580px;
+  /* Reading measure for the stacked tabs; Providers opts out and fills. */
+  --tb-settings-measure: 600px;
+}
+
 .settings {
   display: flex !important;
   width: min(100vw, var(--tb-settings-width));
@@ -1131,10 +1192,10 @@ select:focus-visible {
 .settings-titlebar {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   position: relative;
-  height: 48px;
-  padding: 0 12px;
+  height: 34px;
+  padding: 0 0 0 12px;
   border-bottom: 0;
   background: transparent;
   flex: none;
@@ -1142,52 +1203,24 @@ select:focus-visible {
 
 .settings-titlebar__title {
   display: inline-flex;
-  flex: none;
+  flex: 1;
+  min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   /* The legacy rule hard-codes white for a #1e1e1e caption bar; the warm
      titlebar is transparent over the panel, so it has to follow the theme. */
   color: var(--tb-text);
-  font-family: var(--tb-type-display-family);
-  font-size: 18px;
+  font-family: var(--tb-type-windows-family);
+  font-size: 12.5px;
   font-weight: 600;
-}
-
-
-.settings-titlebar__traffic {
-  position: absolute;
-  left: 16px;
-  display: flex;
-  gap: 10px;
-}
-
-.settings-titlebar__traffic > span {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--tb-text) 16%, transparent);
+  letter-spacing: 0.01em;
 }
 
 .settings-titlebar__controls {
-  position: absolute;
-  right: 0;
-  top: 0;
+  position: static;
   display: flex;
-}
-
-.settings-titlebar__control {
-  height: 48px;
-  color: var(--tb-text-secondary);
-}
-
-.settings-titlebar__control:hover {
-  background: color-mix(in srgb, var(--tb-text) 8%, transparent);
-  color: var(--tb-text);
-}
-
-.settings-titlebar__control--close:hover {
-  background: var(--tb-color-critical);
-  color: #fff;
+  align-self: stretch;
+  margin: 0;
 }
 
 .settings-tabs {
@@ -1197,13 +1230,13 @@ select:focus-visible {
   width: auto !important;
   min-width: 0;
   margin: 0 !important;
-  padding: 0 12px 12px !important;
+  padding: 0 10px 8px !important;
   border: 0 !important;
   border-right: 0 !important;
   border-radius: 0 !important;
   background: transparent !important;
   justify-content: center;
-  gap: 4px;
+  gap: 2px;
   overflow-x: auto;
   overflow-y: hidden;
   grid-column: unset !important;
@@ -1213,20 +1246,21 @@ select:focus-visible {
 .settings-tab {
   display: flex !important;
   width: auto !important;
-  min-width: 64px;
+  min-width: 56px;
   min-height: 0;
   flex: 0 0 auto;
-  padding: 8px 12px 7px !important;
+  padding: 6px 10px 5px !important;
   border: 1px solid transparent !important;
-  border-radius: 12px !important;
+  border-radius: 8px !important;
   flex-direction: column !important;
   align-items: center;
   justify-content: center;
-  gap: 5px !important;
+  gap: 3px !important;
   color: var(--tb-text-secondary) !important;
-  font-size: 11px !important;
+  font-size: 10.5px !important;
   font-weight: 500 !important;
   text-align: center;
+  white-space: nowrap;
 }
 
 .settings-tab:hover:not(.settings-tab--active) {
@@ -1249,43 +1283,66 @@ select:focus-visible {
 
 .settings-tab__icon,
 .settings-tab__icon > svg {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
 }
 
 .settings-tab__label {
   line-height: 1.1;
 }
 
+/* Content column: the dialog fills the window, but the stacked settings
+   rows stop at a reading measure so a label and its control never sit at
+   opposite ends of the sheet. */
 .settings-body {
-  width: auto !important;
+  display: flex;
+  width: 100% !important;
   max-width: none !important;
   min-width: 0;
   min-height: 0;
   flex: 1 1 auto !important;
+  flex-direction: column;
+  /* Centering lives on the container: the section margins below are
+     `!important`, so `margin-inline: auto` on the children never lands. */
+  align-items: center;
   margin: 0 !important;
-  padding: 8px 22px 24px !important;
+  padding: 2px 0 16px !important;
   overflow-y: auto;
   grid-column: unset !important;
   grid-row: unset !important;
 }
 
+.settings-body > * {
+  width: min(100%, var(--tb-settings-measure));
+  flex: none;
+  padding-inline: 16px;
+  box-sizing: border-box;
+}
+
 .settings-body--providers {
-  padding: 8px 12px 12px !important;
+  align-items: stretch;
+  padding: 2px 10px 10px !important;
   overflow: hidden;
+}
+
+.settings-body--providers > * {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-inline: 0;
 }
 
 .settings-status {
   position: fixed;
   z-index: 4;
-  top: 52px;
+  top: 40px;
   right: 12px;
 }
 
 .settings-section,
 .settings-group,
 .form-section {
-  margin: 0 0 22px !important;
+  margin: 0 0 14px !important;
   padding: 0 !important;
   background: transparent !important;
 }
@@ -1299,17 +1356,17 @@ select:focus-visible {
 .settings-section__title,
 .settings-group > h3,
 .section-title {
-  margin: 0 0 7px !important;
+  margin: 0 0 5px !important;
   color: var(--tb-muted) !important;
-  font-size: 11px !important;
+  font-size: 10.5px !important;
   font-weight: 700 !important;
-  letter-spacing: 0.14em !important;
+  letter-spacing: 0.1em !important;
   text-transform: none !important;
 }
 
 .settings-section__title--bold {
   font-family: var(--tb-type-display-family) !important;
-  font-size: 24px !important;
+  font-size: 19px !important;
   font-weight: 600 !important;
   letter-spacing: -0.01em !important;
   color: var(--tb-text) !important;
@@ -1317,9 +1374,9 @@ select:focus-visible {
 
 .settings-section__caption,
 .settings-section__hint {
-  margin: 0 0 16px !important;
+  margin: 0 0 10px !important;
   color: var(--tb-muted) !important;
-  font-size: 13px !important;
+  font-size: 11.5px !important;
   line-height: 1.6 !important;
 }
 
@@ -1328,7 +1385,7 @@ select:focus-visible {
 .form-card,
 .settings-section__group {
   border: 1px solid var(--tb-border) !important;
-  border-radius: var(--tb-card-radius) !important;
+  border-radius: 10px !important;
   background: var(--tb-surface-raised) !important;
   overflow: hidden !important;
   gap: 0 !important;
@@ -1339,9 +1396,9 @@ select:focus-visible {
   display: grid !important;
   grid-template-columns: minmax(0, 1fr) auto !important;
   align-items: center !important;
-  gap: 14px !important;
+  gap: 12px !important;
   margin: 0 !important;
-  padding: 14px 17px !important;
+  padding: 8px 12px !important;
   border: 0 !important;
   border-bottom: 1px solid color-mix(in srgb, var(--tb-text) 7%, transparent) !important;
   border-radius: 0 !important;
@@ -1365,15 +1422,17 @@ select:focus-visible {
 }
 
 .settings-field__label {
-  font-size: 14.5px !important;
+  font-size: 12.5px !important;
   font-weight: 600 !important;
+  line-height: 1.3 !important;
   color: var(--tb-text) !important;
 }
 
 .settings-field__desc {
-  margin-top: 2px !important;
+  margin-top: 1px !important;
   color: var(--tb-muted) !important;
-  font-size: 12.5px !important;
+  font-size: 11px !important;
+  line-height: 1.35 !important;
 }
 
 .select,
@@ -1383,23 +1442,23 @@ select:focus-visible {
 .settings-body input[type="text"],
 .settings-body input[type="number"],
 .settings-body input[type="password"] {
-  height: 32px !important;
-  min-height: 32px !important;
-  padding: 0 12px !important;
+  height: 27px !important;
+  min-height: 27px !important;
+  padding: 0 10px !important;
   border: 1px solid color-mix(in srgb, var(--tb-text) 14%, transparent) !important;
-  border-radius: 999px !important;
+  border-radius: 6px !important;
   background: var(--tb-surface-raised) !important;
   color: var(--tb-text) !important;
-  font-size: 13px !important;
+  font-size: 12px !important;
   box-shadow: none !important;
 }
 
 .select {
   appearance: none !important;
-  padding-right: 28px !important;
+  padding-right: 24px !important;
   background-image: linear-gradient(45deg, transparent 50%, var(--tb-muted) 50%),
     linear-gradient(135deg, var(--tb-muted) 50%, transparent 50%) !important;
-  background-position: calc(100% - 14px) calc(50% - 1px), calc(100% - 10px) calc(50% - 1px) !important;
+  background-position: calc(100% - 12px) calc(50% - 1px), calc(100% - 8px) calc(50% - 1px) !important;
   background-size: 4px 4px, 4px 4px !important;
   background-repeat: no-repeat !important;
 }
@@ -1407,13 +1466,13 @@ select:focus-visible {
 .credential-btn,
 .settings-body button.credential-btn,
 .settings-body .credential-btn--secondary {
-  height: 32px !important;
-  padding: 0 14px !important;
+  height: 27px !important;
+  padding: 0 12px !important;
   border: 1px solid color-mix(in srgb, var(--tb-text) 12%, transparent) !important;
-  border-radius: 999px !important;
+  border-radius: 6px !important;
   background: var(--tb-surface) !important;
   color: var(--tb-text) !important;
-  font-size: 12.5px !important;
+  font-size: 11.5px !important;
   font-weight: 500 !important;
   box-shadow: none !important;
 }
@@ -1430,62 +1489,65 @@ select:focus-visible {
 .usage-spend-hero {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .usage-spend-hero__card {
-  padding: 16px 17px;
+  padding: 10px 12px;
   border: 1px solid var(--tb-border);
-  border-radius: var(--tb-card-radius);
+  border-radius: 10px;
   background: var(--tb-surface-raised);
 }
 
 .usage-spend-hero__label {
-  margin-bottom: 8px;
+  margin-bottom: 5px;
   color: var(--tb-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.1em;
 }
 
+/* Multi-currency totals ("US$30.84 · ¥36.50") have to fit inside a third of
+   the sheet, so the figure scales with the card instead of overflowing it. */
 .usage-spend-hero__value {
   font-family: var(--tb-type-display-family);
-  font-size: 30px;
+  font-size: clamp(15px, 2.6vw, 20px);
   font-weight: 600;
-  line-height: 1;
+  line-height: 1.2;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .usage-spend-actions {
   display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 6px;
+  margin-bottom: 10px;
 }
 
 .usage-spend-table {
   width: 100%;
   border-collapse: collapse;
   border: 1px solid var(--tb-border);
-  border-radius: var(--tb-card-radius);
+  border-radius: 10px;
   overflow: hidden;
   background: var(--tb-surface-raised);
 }
 
 .usage-spend-table th,
 .usage-spend-table td {
-  padding: 12px 17px;
+  padding: 7px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--tb-text) 6%, transparent);
   text-align: left;
-  font-size: 13.5px;
+  font-size: 12px;
 }
 
 .usage-spend-table th {
   background: color-mix(in srgb, var(--tb-surface) 70%, #f0e6cf);
   color: var(--tb-muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
 }
 
 :root[data-theme="dark"] .usage-spend-table th {
@@ -1504,7 +1566,26 @@ select:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
-/* Toggle open state uses terracotta accent */
+/* Toggle: terracotta when on, and sized to the compact Windows row rhythm
+   (the 42x24 base is tuned for the roomier macOS sheet). */
+.toggle,
+input.toggle {
+  width: 34px !important;
+  height: 19px !important;
+}
+
+.toggle::after,
+.toggle:checked::after {
+  top: 2.5px !important;
+  left: 2.5px !important;
+  width: 14px !important;
+  height: 14px !important;
+}
+
+.toggle:checked::after {
+  transform: translateX(15px) !important;
+}
+
 .toggle:checked,
 input.toggle:checked {
   background: var(--tb-color-accent) !important;
@@ -1523,7 +1604,7 @@ input.toggle:checked {
 .provider-detail,
 .provider-overview__list,
 .provider-split > * {
-  border-radius: var(--tb-card-radius) !important;
+  border-radius: 10px !important;
 }
 
 .providers-sidebar-shell,
@@ -1618,18 +1699,18 @@ input.toggle:checked {
 .provider-overview__header {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex: none;
-  padding: 12px 17px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--tb-border);
   background: var(--tb-table-head-bg);
 }
 
 .provider-overview__count {
   color: var(--tb-muted);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -1680,11 +1761,11 @@ input.toggle:checked {
 
 .provider-overview__row {
   display: grid;
-  grid-template-columns: minmax(190px, 1fr) 110px minmax(150px, 170px) 34px 42px;
-  min-height: 56px;
+  grid-template-columns: minmax(150px, 1fr) 96px minmax(130px, 156px) 30px 38px;
+  min-height: 40px;
   align-items: center;
-  gap: 13px;
-  padding: 9px 17px;
+  gap: 10px;
+  padding: 5px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--tb-text) 6%, transparent);
 }
 
@@ -1696,7 +1777,7 @@ input.toggle:checked {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 11px;
+  gap: 9px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -1705,22 +1786,9 @@ input.toggle:checked {
 }
 
 .provider-overview__brand {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  flex: none;
-  place-items: center;
-  border-radius: 9px;
-  overflow: hidden;
-}
-
-.provider-overview__brand .provider-icon {
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.provider-overview__brand .provider-icon svg {
-  filter: brightness(0) invert(1);
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
 }
 
 .sr-only {
@@ -1745,7 +1813,7 @@ input.toggle:checked {
 .provider-overview__identity strong {
   overflow: hidden;
   color: var(--tb-text);
-  font-size: 14px;
+  font-size: 12.5px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1756,7 +1824,7 @@ input.toggle:checked {
 .provider-overview__metric {
   overflow: hidden;
   color: var(--tb-muted);
-  font-size: 12.5px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1764,7 +1832,7 @@ input.toggle:checked {
 
 .provider-overview__identity small {
   font-family: var(--tb-type-mono-family);
-  font-size: 12px;
+  font-size: 10.5px;
 }
 
 .provider-overview__auth {
@@ -2468,10 +2536,10 @@ input.toggle:checked {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 11px;
-  padding: 15px 16px 16px;
+  gap: 7px;
+  padding: 9px 10px 10px;
   border: 1px solid var(--tb-border);
-  border-radius: var(--tb-card-radius);
+  border-radius: 10px;
   background: var(--tb-surface-raised);
   color: var(--tb-text);
   text-align: left;
@@ -2484,7 +2552,7 @@ input.toggle:checked {
 
 .display-mode-card--active {
   border: 1.5px solid var(--tb-color-accent);
-  padding: 14.5px 15.5px 15.5px;
+  padding: 8.5px 9.5px 9.5px;
 }
 
 .display-mode-card:disabled {
@@ -2493,11 +2561,11 @@ input.toggle:checked {
 }
 
 .display-mode-card__name {
-  padding: 4px 9px;
+  padding: 2px 8px;
   border-radius: 999px;
   background: var(--tb-chip-bg);
   color: var(--tb-text-secondary);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 600;
 }
 
@@ -2506,32 +2574,19 @@ input.toggle:checked {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 24px;
-  padding: 4px 9px;
-  border-radius: 8px;
+  min-height: 21px;
+  padding: 3px 8px;
+  border-radius: 6px;
   background: var(--tb-footer-bg);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
 
 .display-mode-card__brand {
-  display: grid;
   width: 15px;
   height: 15px;
-  flex: none;
-  place-items: center;
   border-radius: 4px;
-  overflow: hidden;
-}
-
-.display-mode-card__brand .provider-icon {
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.display-mode-card__brand .provider-icon svg {
-  filter: brightness(0) invert(1);
 }
 
 .display-mode-card__reset {
@@ -2542,8 +2597,8 @@ input.toggle:checked {
 
 .display-mode-card__desc {
   color: var(--tb-muted);
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 /* ── Settings → Usage & Spend: brand tile in the provider column ──── */
@@ -2555,20 +2610,24 @@ input.toggle:checked {
 }
 
 .usage-spend-table__brand {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  flex: none;
-  place-items: center;
-  border-radius: 7px;
-  overflow: hidden;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
 }
 
-.usage-spend-table__brand .provider-icon {
-  background: transparent !important;
-  box-shadow: none !important;
+/* Ghost buttons (notification sounds, shortcut capture) inherit the roomy
+   macOS metrics; bring them onto the compact row rhythm. */
+.settings-body .shortcut-capture__button {
+  padding: 4px 10px !important;
+  border-radius: 6px !important;
+  font-size: 11.5px !important;
 }
 
-.usage-spend-table__brand .provider-icon svg {
-  filter: brightness(0) invert(1);
+.settings-body .notification-sound-file {
+  width: 124px !important;
+}
+
+.settings-body .notification-sound-row {
+  gap: 5px !important;
+  max-width: 260px !important;
 }
