@@ -160,6 +160,7 @@ export default function ProvidersTab({
   const [search, setSearch] = useState("");
   const [orderedProviders, setOrderedProviders] = useState(providers);
   const [previousProviders, setPreviousProviders] = useState(providers);
+  const [reorderError, setReorderError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   if (providers !== previousProviders) {
@@ -226,8 +227,12 @@ export default function ProvidersTab({
     const next = nextIds
       .map((providerId) => byId.get(providerId))
       .filter((provider): provider is ProviderCatalogEntry => Boolean(provider));
+    setReorderError(null);
     setOrderedProviders(next);
-    void reorderProviders(nextIds).catch(() => setOrderedProviders(providers));
+    void reorderProviders(nextIds).catch((error: unknown) => {
+      setOrderedProviders(providers);
+      setReorderError(String(error));
+    });
   };
 
   if (selected) {
@@ -244,6 +249,7 @@ export default function ProvidersTab({
           providerId={selected.id}
           cookieDomain={selected.cookieDomain}
           resetTimeRelative={settings.resetTimeRelative}
+          enableAnimations={settings.enableAnimations}
           providerMetrics={settings.providerMetrics}
           wayfinderGatewayUrl={settings.wayfinderGatewayUrl ?? "http://127.0.0.1:8088"}
           settingsDisabled={saving}
@@ -307,6 +313,11 @@ export default function ProvidersTab({
           ) : null}
         </div>
       </div>
+      {reorderError ? (
+        <p className="provider-overview__hint" role="alert">
+          {t("ErrorPrefix")} {reorderError}
+        </p>
+      ) : null}
       <p className="provider-overview__hint">{t("ProvidersCredentialHint")}</p>
     </section>
   );

@@ -1,9 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { useLocale } from "../../../hooks/useLocale";
-import {
-  registerGlobalShortcut,
-  unregisterGlobalShortcut,
-} from "../../../lib/tauri";
 import { ShortcutCapture } from "../../../components/ShortcutCapture";
 import { Field, Toggle } from "../../../components/FormControls";
 import type { TabProps } from "../settingsTabs";
@@ -25,7 +21,6 @@ function parseSshHosts(value: string): string[] {
 
 export default function AdvancedTab({ settings, set, saving }: TabProps) {
   const { t } = useLocale();
-  const [shortcutError, setShortcutError] = useState<string | null>(null);
   const [codexDirsDraft, setCodexDirsDraft] = useState(() =>
     formatCodexSessionsDirs(settings.codexCustomSessionsDirs),
   );
@@ -42,29 +37,6 @@ export default function AdvancedTab({ settings, set, saving }: TabProps) {
   useEffect(() => {
     if (!saving) setSshHostsDraft((settings.agentSessionSshHosts ?? []).join(", "));
   }, [saving, settings.agentSessionSshHosts]);
-
-  const commitShortcut = useCallback(
-    async (accelerator: string) => {
-      setShortcutError(null);
-      try {
-        await registerGlobalShortcut(accelerator).catch(() => {});
-        set({ globalShortcut: accelerator });
-      } catch (err: unknown) {
-        setShortcutError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [set],
-  );
-
-  const clearShortcut = useCallback(async () => {
-    setShortcutError(null);
-    try {
-      await unregisterGlobalShortcut().catch(() => {});
-      set({ globalShortcut: "" });
-    } catch (err: unknown) {
-      setShortcutError(err instanceof Error ? err.message : String(err));
-    }
-  }, [set]);
 
   const commitCodexDirs = useCallback(() => {
     set({ codexCustomSessionsDirs: parseCodexSessionsDirs(codexDirsDraft) });
@@ -83,14 +55,11 @@ export default function AdvancedTab({ settings, set, saving }: TabProps) {
             <ShortcutCapture
               value={settings.globalShortcut}
               disabled={saving}
-              onCommit={(accel) => void commitShortcut(accel)}
-              onClear={() => void clearShortcut()}
+              onCommit={(accelerator) => set({ globalShortcut: accelerator })}
+              onClear={() => set({ globalShortcut: "" })}
             />
           </Field>
         </div>
-        {shortcutError && (
-          <p className="settings-section__error">{shortcutError}</p>
-        )}
         <p className="settings-section__hint">{t("ShortcutRecordingHint")}</p>
       </section>
 

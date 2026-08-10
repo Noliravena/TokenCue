@@ -1,4 +1,6 @@
-import type React from "react";
+import { createContext, useContext, type ReactNode } from "react";
+
+const FieldLabelContext = createContext<string | undefined>(undefined);
 
 // ── tiny reusable controls ──────────────────────────────────────────
 
@@ -15,12 +17,13 @@ export function Toggle({
   ariaLabel?: string;
   disabled?: boolean;
 }) {
+  const fieldLabel = useContext(FieldLabelContext);
   const input = (
     <input
       type="checkbox"
       className="toggle"
       checked={checked}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? fieldLabel}
       disabled={disabled}
       onChange={(e) => onChange(e.target.checked)}
     />
@@ -72,6 +75,7 @@ export function Select({
   ariaLabel?: string;
   minWidth?: number;
 }) {
+  const fieldLabel = useContext(FieldLabelContext);
   const selectedLabel = options.find((option) => option.value === value)?.label ?? value;
   const calculatedWidth = Math.min(
     168,
@@ -85,7 +89,7 @@ export function Select({
       style={{ width }}
       value={value}
       disabled={disabled}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? fieldLabel}
       onChange={(e) => onChange(e.target.value)}
     >
       {options.map((o) => (
@@ -114,6 +118,7 @@ export function NumberInput({
   disabled?: boolean;
   ariaLabel?: string;
 }) {
+  const fieldLabel = useContext(FieldLabelContext);
   return (
     <input
       type="number"
@@ -123,7 +128,7 @@ export function NumberInput({
       max={max}
       step={step}
       disabled={disabled}
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? fieldLabel}
       onChange={(e) => {
         const raw = e.target.value;
         if (raw === "") return;
@@ -144,19 +149,21 @@ export function Field({
 }: {
   label: string;
   description?: string;
-  children: React.ReactNode;
+  children: ReactNode;
   leading?: boolean;
 }) {
   return (
-    <div className={`settings-field${leading ? " settings-field--leading" : ""}`}>
-      {leading && <div className="settings-field__control">{children}</div>}
-      <div className="settings-field__text">
-        <span className="settings-field__label">{label}</span>
-        {description && (
-          <span className="settings-field__desc">{description}</span>
-        )}
+    <FieldLabelContext.Provider value={label}>
+      <div className={`settings-field${leading ? " settings-field--leading" : ""}`}>
+        {leading && <div className="settings-field__control">{children}</div>}
+        <div className="settings-field__text">
+          <span className="settings-field__label">{label}</span>
+          {description && (
+            <span className="settings-field__desc">{description}</span>
+          )}
+        </div>
+        {!leading && <div className="settings-field__control">{children}</div>}
       </div>
-      {!leading && <div className="settings-field__control">{children}</div>}
-    </div>
+    </FieldLabelContext.Provider>
   );
 }

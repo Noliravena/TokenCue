@@ -10,6 +10,7 @@ import type {
   NotificationSoundEvent,
   NotificationSoundPaths,
   NotificationSoundTheme,
+  ThemePreference,
   UsageThresholdOverride,
 } from "../../../types/bridge";
 import type { LocaleKey } from "../../../i18n/keys";
@@ -19,6 +20,7 @@ import {
   refreshCadencePatch,
   refreshCadenceValue,
 } from "../refreshCadence";
+import { THEME_OPTIONS } from "../themeOptions";
 
 const FALLBACK_LANGUAGE_OPTIONS: LanguageOption[] = [
   { value: "english", display: "English" },
@@ -256,11 +258,42 @@ export default function GeneralTab({
       </section>}
 
       {mode === "general" && <section className="settings-section">
+        <h3 className="settings-section__title">{t("Appearance")}</h3>
+        <div className="settings-section__group">
+          <Field label={t("ThemeSelection")} description={t("ThemeHelper")}>
+            <Select
+              value={settings.theme}
+              disabled={saving}
+              ariaLabel={t("ThemeSelection")}
+              minWidth={116}
+              options={THEME_OPTIONS.map((option) => ({
+                value: option.value,
+                label: t(option.labelKey),
+              }))}
+              onChange={(value) => set({ theme: value as ThemePreference })}
+            />
+          </Field>
+          <Field
+            label={t("EnableAnimationsLabel")}
+            description={t("EnableAnimationsHelper")}
+            leading
+          >
+            <Toggle
+              checked={settings.enableAnimations}
+              disabled={saving}
+              onChange={(value) => set({ enableAnimations: value })}
+            />
+          </Field>
+        </div>
+      </section>}
+
+      {mode === "general" && <section className="settings-section">
         <h3 className="settings-section__title">{t("StartupSettings")}</h3>
         <div className="settings-section__group">
           <Field label={t("StartAtLogin")} description={t("StartAtLoginHelper")} leading>
             <Toggle
               checked={settings.startAtLogin}
+              ariaLabel={t("StartAtLogin")}
               disabled={saving}
               onChange={(v) => set({ startAtLogin: v })}
             />
@@ -272,6 +305,7 @@ export default function GeneralTab({
           >
             <Toggle
               checked={settings.startMinimized}
+              ariaLabel={t("StartMinimized")}
               disabled={saving}
               onChange={(v) => set({ startMinimized: v })}
             />

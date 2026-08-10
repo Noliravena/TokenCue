@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { getProviderChartData, getSettingsSnapshot } from "../../../../../lib/tauri";
+import { getProviderChartData } from "../../../../../lib/tauri";
 import { providerSupportsChartData } from "../../../../../lib/providerCharts";
-import type { ProviderChartData, SettingsSnapshot } from "../../../../../types/bridge";
+import type { ProviderChartData } from "../../../../../types/bridge";
 import type { useLocale } from "../../../../../hooks/useLocale";
 import { CostHistoryChart } from "./CostHistoryChart";
 import { CreditsHistoryChart } from "./CreditsHistoryChart";
@@ -12,6 +12,7 @@ type T = ReturnType<typeof useLocale>["t"];
 interface Props {
   providerId: string;
   accountEmail: string | null;
+  animations: boolean;
   t: T;
 }
 
@@ -26,10 +27,9 @@ type TabKey = "cost" | "credits" | "usage";
  * Phase 10: fetches the latest settings snapshot so the animation flag feeds
  * through to each chart component.
  */
-export function ChartsSection({ providerId, accountEmail, t }: Props) {
+export function ChartsSection({ providerId, accountEmail, animations, t }: Props) {
   const [data, setData] = useState<ProviderChartData | null>(null);
   const [active, setActive] = useState<TabKey | null>(null);
-  const [animations, setAnimations] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -51,22 +51,6 @@ export function ChartsSection({ providerId, accountEmail, t }: Props) {
       cancelled = true;
     };
   }, [providerId, accountEmail]);
-
-  useEffect(() => {
-    let cancelled = false;
-    getSettingsSnapshot()
-      .then((s: SettingsSnapshot) => {
-        if (!cancelled) {
-          setAnimations(s.enableAnimations);
-        }
-      })
-      .catch(() => {
-        // Keep defaults on failure.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [providerId]);
 
   if (!data) return null;
 

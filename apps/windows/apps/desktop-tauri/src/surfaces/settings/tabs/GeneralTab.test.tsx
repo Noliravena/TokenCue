@@ -126,6 +126,41 @@ describe("GeneralTab language picker", () => {
     expect(screen.getByText("繁體中文")).toBeInTheDocument();
   });
 
+  it("renders auto, light, and dark theme options and updates the preference", () => {
+    const set = vi.fn();
+    render(<GeneralTab settings={settings} set={set} saving={false} />);
+
+    const select = screen.getByRole("combobox", { name: "ThemeSelection" });
+    expect(select).toHaveValue("dark");
+    expect(select.querySelectorAll("option")).toHaveLength(3);
+    expect(screen.getByRole("option", { name: "ThemeAutoOption" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "LightMode" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "DarkMode" })).toBeInTheDocument();
+
+    fireEvent.change(select, { target: { value: "light" } });
+    expect(set).toHaveBeenCalledWith({ theme: "light" });
+  });
+
+  it("updates both Windows startup preferences from accessible controls", () => {
+    const set = vi.fn();
+    render(<GeneralTab settings={settings} set={set} saving={false} />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "StartAtLogin" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "StartMinimized" }));
+
+    expect(set).toHaveBeenNthCalledWith(1, { startAtLogin: true });
+    expect(set).toHaveBeenNthCalledWith(2, { startMinimized: true });
+  });
+
+  it("updates the application animation preference", () => {
+    const set = vi.fn();
+    render(<GeneralTab settings={settings} set={set} saving={false} />);
+
+    fireEvent.click(screen.getByRole("checkbox", { name: "EnableAnimationsLabel" }));
+
+    expect(set).toHaveBeenCalledWith({ enableAnimations: false });
+  });
+
   it("updates the predictive pace warning preference", () => {
     const set = vi.fn();
     render(

@@ -60,11 +60,21 @@ function AppInner() {
   const [state, setState] = useState<BootstrapState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [themePreference, setThemePreference] = useState<ThemePreference>("dark");
+  const [animationsEnabled, setAnimationsEnabled] = useState(true);
   const [onboardingComplete, setOnboardingComplete] = useState(
     isOnboardingComplete,
   );
 
   useTheme(themePreference);
+
+  useEffect(() => {
+    document.documentElement.dataset.animations = animationsEnabled
+      ? "enabled"
+      : "disabled";
+    return () => {
+      delete document.documentElement.dataset.animations;
+    };
+  }, [animationsEnabled]);
 
   const reloadBootstrapState = useCallback(
     () => getBootstrapState(),
@@ -81,6 +91,7 @@ function AppInner() {
         }
         setState(bootstrap);
         setThemePreference(bootstrap.settings.theme);
+        setAnimationsEnabled(bootstrap.settings.enableAnimations);
         setError(null);
       })
       .catch((cause: unknown) => {
@@ -103,6 +114,7 @@ function AppInner() {
             .then((bootstrap) => {
               setState(bootstrap);
               setThemePreference(bootstrap.settings.theme);
+              setAnimationsEnabled(bootstrap.settings.enableAnimations);
               setError(null);
             })
             .catch(() => {});
@@ -116,9 +128,13 @@ function AppInner() {
       const detail = (evt as CustomEvent<BootstrapState["settings"]>).detail;
       if (detail) {
         setThemePreference(detail.theme);
+        setAnimationsEnabled(detail.enableAnimations);
       } else {
         getSettingsSnapshot()
-          .then((fresh) => setThemePreference(fresh.theme))
+          .then((fresh) => {
+            setThemePreference(fresh.theme);
+            setAnimationsEnabled(fresh.enableAnimations);
+          })
           .catch(() => {});
       }
     };
@@ -190,6 +206,7 @@ function AppInner() {
         onComplete={(nextState) => {
           setState(nextState);
           setThemePreference(nextState.settings.theme);
+          setAnimationsEnabled(nextState.settings.enableAnimations);
           setOnboardingComplete(true);
         }}
       />
