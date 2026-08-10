@@ -284,7 +284,6 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
             let _ = shell::settings_window::open_or_focus(app, &tab);
         }
         Some(MenuAction::OpenFlyout) => {
-            crate::auto_refresh::note_menu_open();
             let _ = crate::open_fixed_flyout(app);
         }
         Some(MenuAction::Refresh) => {

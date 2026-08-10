@@ -67,6 +67,9 @@ pub fn is_open(app: &AppHandle) -> bool {
 /// precedent) — callers must invoke this from an async context (an `async`
 /// command, or `tauri::async_runtime::spawn`), never a sync command handler.
 pub fn open_or_focus(app: &AppHandle, position: Option<(i32, i32)>) -> Result<(), String> {
+    if !is_open(app) {
+        handle_menu_open(app);
+    }
     if let Some(window) = app.get_webview_window(FLYOUT_LABEL) {
         if let Some((x, y)) = position {
             let _ = window.set_position(PhysicalPosition::new(x, y));
@@ -132,6 +135,22 @@ pub fn open_or_focus(app: &AppHandle, position: Option<(i32, i32)>) -> Result<()
     }
     arm_reveal(app)?;
     Ok(())
+}
+
+fn handle_menu_open(app: &AppHandle) {
+    crate::auto_refresh::note_menu_open();
+    let settings = tokencue::settings::Settings::load();
+    if !should_force_refresh_on_open(&settings) {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = crate::commands::do_refresh_providers(&app).await;
+    });
+}
+
+fn should_force_refresh_on_open(settings: &tokencue::settings::Settings) -> bool {
+    settings.refresh_all_providers_on_menu_open
 }
 
 fn show_grace_starts_now(first_build_hidden: bool) -> bool {
@@ -376,5 +395,13 @@ mod tests {
     fn first_hidden_build_does_not_start_show_grace() {
         assert!(show_grace_starts_now(false));
         assert!(!show_grace_starts_now(true));
+    }
+
+    #[test]
+    fn menu_open_refresh_preference_is_opt_in() {
+        let mut settings = tokencue::settings::Settings::default();
+        assert!(!should_force_refresh_on_open(&settings));
+        settings.refresh_all_providers_on_menu_open = true;
+        assert!(should_force_refresh_on_open(&settings));
     }
 }
