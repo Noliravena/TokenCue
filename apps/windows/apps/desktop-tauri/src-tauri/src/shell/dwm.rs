@@ -203,8 +203,14 @@ fn force_dark_caption_inner(win: &tauri::WebviewWindow, keep_resize: bool) {
     tracing::info!("dwm: inner={inner:#x} root={hwnd:#x}");
 
     const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
+    const DWMWA_BORDER_COLOR: u32 = 34;
     const DWMWA_CAPTION_COLOR: u32 = 35;
+    // Win11 sentinel documented by DWM: suppress the system-drawn border.
+    // The web surface owns the flyout/settings outline, so leaving the DWM
+    // border enabled creates a dark one-pixel frame in the light theme.
+    const DWMWA_COLOR_NONE: u32 = 0xFFFF_FFFE;
     let dark_mode: u32 = 1;
+    let border_color: u32 = DWMWA_COLOR_NONE;
     let caption_color: u32 = 0x001C1C1E;
 
     unsafe {
@@ -220,7 +226,13 @@ fn force_dark_caption_inner(win: &tauri::WebviewWindow, keep_resize: bool) {
             &raw const caption_color as *const c_void,
             4,
         );
-        tracing::info!("dwm: dark_mode={r1:#x} caption_color={r2:#x}");
+        let r_border = DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_BORDER_COLOR,
+            &raw const border_color as *const c_void,
+            4,
+        );
+        tracing::info!("dwm: dark_mode={r1:#x} caption_color={r2:#x} border_color={r_border:#x}");
 
         // Extend DWM frame fully into client area
         let margins = Margins {

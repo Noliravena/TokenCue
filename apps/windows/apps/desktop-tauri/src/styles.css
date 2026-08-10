@@ -1059,12 +1059,14 @@ html {
 /* ── Tray Panel ───────────────────────────────────────────────────── */
 
 /* Hide the panel during the initial resize + reposition dance so the
-   user never sees the window jump around.  Once layout is measured and
-   the window is anchored in its final position, .tray-panel-reveal--ready
-   fades the content in smoothly. */
+   user never sees the window jump around.  Keep the flyout viewport on the
+   same surface as the rounded panel: a transparent root exposes WebView2's
+   native/DWM backing store around the radius, which appears as a black frame
+   in the light theme.  Once layout is measured and the window is anchored in
+   its final position, .tray-panel-reveal--ready fades the content in smoothly. */
 html:has(.tray-panel-reveal),
 body:has(.tray-panel-reveal) {
-  background: transparent;
+  background: var(--tb-surface);
 }
 .tray-panel-reveal {
   display: flex;
