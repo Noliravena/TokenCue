@@ -124,22 +124,90 @@ where
 
     on_phase(LoginPhase::Requesting);
 
-    let mut child = match spawn_login_process(binary_path.as_path(), args) {
+    let mut child = match spawn_async_login_process(binary_path.as_path(), args) {
         Ok(c) => c,
         Err(e) => return launch_failed_result(e),
     };
 
     let mut state = CliLoginState::new(timeout_secs, &on_phase, success_markers);
-
-    if let Some(outcome) = read_login_stream(child.stdout.take(), &mut state) {
-        return stop_child_with_outcome(&mut child, state, outcome);
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    if let Some(stdout) = child.stdout.take() {
+        tokio::spawn(forward_login_stream(stdout, tx.clone()));
+    }
+    if let Some(stderr) = child.stderr.take() {
+        tokio::spawn(forward_login_stream(stderr, tx));
     }
 
-    if let Some(outcome) = read_login_stream(child.stderr.take(), &mut state) {
-        return stop_child_with_outcome(&mut child, state, outcome);
-    }
+    loop {
+        while let Ok(line) = rx.try_recv() {
+            if let Some(outcome) = state.handle_line(&line) {
+                let _ = child.kill().await;
+                return state.into_result(outcome);
+            }
+        }
 
-    wait_for_login_exit(child, state, &on_phase)
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                tokio::task::yield_now().await;
+                while let Ok(line) = rx.try_recv() {
+                    if let Some(outcome) = state.handle_line(&line) {
+                        return state.into_result(outcome);
+                    }
+                }
+                if status.success() {
+                    on_phase(LoginPhase::Complete);
+                    return state.into_result(LoginOutcome::Success);
+                }
+                return state.into_result(LoginOutcome::Failed {
+                    status: status.code().unwrap_or(-1),
+                });
+            }
+            Ok(None) => {}
+            Err(error) => {
+                return state.into_result(LoginOutcome::LaunchFailed(error.to_string()));
+            }
+        }
+
+        if state.start.elapsed() > state.timeout {
+            let _ = child.kill().await;
+            return state.into_result(LoginOutcome::TimedOut);
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+fn spawn_async_login_process(
+    binary_path: &std::path::Path,
+    args: &[&str],
+) -> Result<tokio::process::Child, String> {
+    #[cfg(windows)]
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let mut command = Command::new(binary_path);
+    command
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(windows)]
+    command.creation_flags(CREATE_NO_WINDOW);
+
+    tokio::process::Command::from(command)
+        .spawn()
+        .map_err(|error| error.to_string())
+}
+
+async fn forward_login_stream<R>(stream: R, tx: tokio::sync::mpsc::UnboundedSender<String>)
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    use tokio::io::AsyncBufReadExt;
+
+    let mut lines = tokio::io::BufReader::new(stream).lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        if tx.send(line).is_err() {
+            break;
+        }
+    }
 }
 
 fn missing_binary_result(binary: &str) -> LoginResult {

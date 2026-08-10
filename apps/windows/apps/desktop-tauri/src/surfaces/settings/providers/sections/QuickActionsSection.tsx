@@ -4,6 +4,7 @@ import type { LocaleKey } from "../../../../i18n/keys";
 interface Props {
   provider: ProviderDetail;
   busy: boolean;
+  loginPhase: string | null;
   onRefresh: () => void;
   onSwitchAccount: () => void;
   onOpenDashboard: () => void;
@@ -22,6 +23,7 @@ interface Props {
 export function QuickActionsSection({
   provider,
   busy,
+  loginPhase,
   onRefresh,
   onSwitchAccount,
   onOpenDashboard,
@@ -48,8 +50,10 @@ export function QuickActionsSection({
             className="btn btn--ghost"
             onClick={onSwitchAccount}
             disabled={busy}
+            aria-busy={loginPhase != null}
+            data-login-phase={loginPhase ?? undefined}
           >
-            {t("ActionSwitchAccount")}
+            {t("ActionSwitchAccount")}{loginPhase ? "…" : ""}
           </button>
         )}
         {provider.dashboardUrl && (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import type { SettingsSnapshot, SettingsUpdate } from "../../../types/bridge";
 import { useLocale } from "../../../hooks/useLocale";
 import {
@@ -7,6 +7,7 @@ import {
   getProviderDetail,
   getProviderRegionOptions,
   getTokenAccountProviders,
+  openExternalUrl,
   openProviderDashboard,
   openProviderStatusPage,
   refreshProviders,
@@ -44,6 +45,7 @@ interface Props {
   providerId: string | null;
   cookieDomain?: string | null;
   resetTimeRelative: boolean;
+  enableAnimations: boolean;
   providerMetrics: SettingsSnapshot["providerMetrics"];
   wayfinderGatewayUrl: string;
   settingsDisabled: boolean;
@@ -61,12 +63,14 @@ export function ProviderDetailPane({
   providerId,
   cookieDomain = null,
   resetTimeRelative,
+  enableAnimations,
   providerMetrics,
   wayfinderGatewayUrl,
   settingsDisabled,
   onSettingsChange,
 }: Props) {
   const { t } = useLocale();
+  const [loginPhase, setLoginPhase] = useState<string | null>(null);
   const [state, dispatch] = useReducer(
     providerDetailPaneReducer,
     { wayfinderGatewayUrl, providerId },
@@ -159,6 +163,22 @@ export function ProviderDetailPane({
   }, []);
 
   useEffect(() => {
+    let active = true;
+    const unlisten = listen<{ providerId: string; phase: string }>(
+      "provider-login-phase",
+      (event) => {
+        if (active && event.payload.providerId === providerId) {
+          setLoginPhase(event.payload.phase);
+        }
+      },
+    );
+    return () => {
+      active = false;
+      void unlisten.then((dispose) => dispose());
+    };
+  }, [providerId]);
+
+  useEffect(() => {
     if (!providerId) {
       dispatch({ type: "LOAD_CLEAR", mode: "empty" });
       return;
@@ -217,6 +237,7 @@ export function ProviderDetailPane({
 
   const handleSwitchAccount = async () => {
     setBusy(true);
+    setLoginPhase(null);
     try {
       await triggerProviderLogin(detail.id);
       dispatch({ type: "BUMP_CREDENTIAL_REVISION" });
@@ -225,6 +246,7 @@ export function ProviderDetailPane({
     } catch (e) {
       setErr(e);
     } finally {
+      setLoginPhase(null);
       setBusy(false);
     }
   };
@@ -256,7 +278,7 @@ export function ProviderDetailPane({
   };
   const handleBuyCredits = () => {
     if (detail.buyCreditsUrl) {
-      void openProviderDashboard(detail.id).catch(setErr);
+      void openExternalUrl(detail.buyCreditsUrl).catch(setErr);
     }
   };
 
@@ -340,12 +362,14 @@ export function ProviderDetailPane({
       <ChartsSection
         providerId={detail.id}
         accountEmail={detail.email}
+        animations={enableAnimations}
         t={t}
       />
 
       <QuickActionsSection
         provider={detail}
         busy={busy}
+        loginPhase={loginPhase}
         onRefresh={handleRefresh}
         onSwitchAccount={handleSwitchAccount}
         onOpenDashboard={handleOpenDashboard}

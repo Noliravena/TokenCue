@@ -252,16 +252,107 @@ pub async fn trigger_provider_login(
         return run_copilot_device_login(&app).await;
     }
 
-    // TODO(6b): replace fallthrough once LoginPhase events land. The login
-    // runners live in `tokencue::login` but are async-oriented and tightly
-    // coupled to the egui UI's phase callbacks. For the Tauri shell we
-    // currently surface the dashboard URL.
+    if matches!(
+        id,
+        ProviderId::Claude | ProviderId::Codex | ProviderId::Gemini
+    ) {
+        return run_cli_provider_login(&app, id).await;
+    }
+
+    // Providers without a first-party CLI/device runner authenticate on their
+    // dashboard. Opening it is an explicit hand-off, not a silent no-op.
     if let Some(url) = dashboard_url_for_provider(&provider_id) {
         return open_url_in_browser(&url);
     }
     Err(format!(
-        "Login flow for '{provider_id}' is not yet wired through the Tauri shell"
+        "'{provider_id}' does not provide an interactive login flow. Configure its API key, cookie, or local CLI credentials in Providers."
     ))
+}
+
+fn login_phase_emitter(
+    app: tauri::AppHandle,
+    provider_id: String,
+) -> impl Fn(tokencue::login::LoginPhase) + Send + 'static {
+    move |phase| {
+        let phase = match phase {
+            tokencue::login::LoginPhase::Idle => "idle",
+            tokencue::login::LoginPhase::Requesting => "requesting",
+            tokencue::login::LoginPhase::WaitingBrowser => "waitingBrowser",
+            tokencue::login::LoginPhase::Complete => "complete",
+        };
+        let _ = app.emit(
+            "provider-login-phase",
+            serde_json::json!({ "providerId": provider_id, "phase": phase }),
+        );
+    }
+}
+
+async fn run_cli_provider_login(app: &tauri::AppHandle, id: ProviderId) -> Result<(), String> {
+    const LOGIN_TIMEOUT_SECS: u64 = 5 * 60;
+    let provider_id = id.cli_name().to_string();
+    let result = match id {
+        ProviderId::Claude => {
+            tokencue::login::run_claude_login(
+                LOGIN_TIMEOUT_SECS,
+                login_phase_emitter(app.clone(), provider_id.clone()),
+            )
+            .await
+        }
+        ProviderId::Codex => {
+            tokencue::login::run_codex_login(
+                LOGIN_TIMEOUT_SECS,
+                login_phase_emitter(app.clone(), provider_id.clone()),
+            )
+            .await
+        }
+        ProviderId::Gemini => {
+            tokencue::login::run_gemini_login(
+                LOGIN_TIMEOUT_SECS,
+                login_phase_emitter(app.clone(), provider_id.clone()),
+            )
+            .await
+        }
+        _ => return Err(format!("No CLI login runner for '{provider_id}'")),
+    };
+    login_result_to_command_result(&provider_id, result)
+}
+
+fn login_result_to_command_result(
+    provider_id: &str,
+    result: tokencue::login::LoginResult,
+) -> Result<(), String> {
+    use tokencue::login::LoginOutcome;
+
+    match result.outcome {
+        LoginOutcome::Success => Ok(()),
+        LoginOutcome::MissingBinary => Err(format!(
+            "The {provider_id} login CLI is not installed or is not available in PATH."
+        )),
+        LoginOutcome::TimedOut => Err(format!("{provider_id} login timed out.")),
+        LoginOutcome::Failed { status } => Err(format_login_error(
+            provider_id,
+            &format!("login process exited with status {status}"),
+            &result.output,
+        )),
+        LoginOutcome::LaunchFailed(error) => {
+            Err(format_login_error(provider_id, &error, &result.output))
+        }
+    }
+}
+
+fn format_login_error(provider_id: &str, reason: &str, output: &str) -> String {
+    let sanitized = output
+        .chars()
+        .filter(|character| !character.is_control() || character.is_whitespace())
+        .collect::<String>();
+    let output = sanitized.trim();
+    if output.is_empty() {
+        format!("{provider_id} login failed: {reason}")
+    } else {
+        let tail = output.chars().rev().take(500).collect::<String>();
+        let tail = tail.chars().rev().collect::<String>();
+        format!("{provider_id} login failed: {reason}. {tail}")
+    }
 }
 
 async fn run_copilot_device_login(app: &tauri::AppHandle) -> Result<(), String> {
@@ -336,5 +427,39 @@ mod tests {
             dashboard_url_for_provider("codex").as_deref(),
             Some("https://chatgpt.com/codex/settings/usage")
         );
+    }
+
+    #[test]
+    fn cli_login_outcomes_become_actionable_command_results() {
+        assert!(
+            login_result_to_command_result(
+                "codex",
+                tokencue::login::LoginResult {
+                    outcome: tokencue::login::LoginOutcome::Success,
+                    output: String::new(),
+                    auth_link: None,
+                },
+            )
+            .is_ok()
+        );
+
+        let error = login_result_to_command_result(
+            "claude",
+            tokencue::login::LoginResult {
+                outcome: tokencue::login::LoginOutcome::MissingBinary,
+                output: String::new(),
+                auth_link: None,
+            },
+        )
+        .expect_err("missing CLI must be reported");
+        assert!(error.contains("not installed"));
+    }
+
+    #[test]
+    fn login_error_removes_terminal_control_characters() {
+        let message = format_login_error("codex", "failed", "\u{1b}[31mbad\u{7} output\n");
+        assert!(!message.contains('\u{1b}'));
+        assert!(!message.contains('\u{7}'));
+        assert!(message.contains("[31mbad output"));
     }
 }
