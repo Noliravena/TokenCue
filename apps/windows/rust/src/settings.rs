@@ -14,6 +14,10 @@ use std::path::PathBuf;
 
 use crate::core::ProviderId;
 
+const WINDOWS_RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+const WINDOWS_RUN_VALUE: &str = "TokenCue";
+pub const STARTUP_LAUNCH_ARG: &str = "--startup";
+
 mod api_keys;
 mod manual_cookies;
 mod provider_workspace;
@@ -549,29 +553,32 @@ impl Settings {
         Ok(())
     }
 
-    fn start_at_login_exe_path(current_exe: &std::path::Path) -> std::path::PathBuf {
+    fn start_at_login_exe_path(current_exe: &std::path::Path) -> Option<std::path::PathBuf> {
         let file_name = current_exe.file_name().and_then(|name| name.to_str());
-        if file_name.is_some_and(|name| {
-            name.eq_ignore_ascii_case("tokencue-cli.exe")
-                || name.eq_ignore_ascii_case("tokencue-desktop.exe")
-        }) && let Some(desktop_exe) = current_exe
-            .parent()
-            .map(|dir| dir.join("tokencue-desktop.exe"))
-            .filter(|path| path.exists())
-        {
-            return desktop_exe;
+        let is_cli = file_name.is_some_and(|name| {
+            name.eq_ignore_ascii_case("tokencue.exe")
+                || name.eq_ignore_ascii_case("tokencue-cli.exe")
+        });
+        if is_cli {
+            // Both the installer and development builds place the desktop app
+            // beside the CLI. Never register the CLI itself: it cannot create
+            // the tray shell and would immediately exit at Windows login.
+            return current_exe
+                .parent()
+                .map(|dir| dir.join("tokencue-desktop.exe"))
+                .filter(|path| path.exists());
         }
 
-        current_exe.to_path_buf()
+        Some(current_exe.to_path_buf())
     }
 
-    fn start_at_login_command(current_exe: &std::path::Path) -> String {
-        let exe_path = Self::start_at_login_exe_path(current_exe);
-        format!("\"{}\"", exe_path.display())
+    fn start_at_login_command(current_exe: &std::path::Path) -> Option<String> {
+        let exe_path = Self::start_at_login_exe_path(current_exe)?;
+        Some(format!("\"{}\" {STARTUP_LAUNCH_ARG}", exe_path.display()))
     }
 
     fn start_at_login_command_needs_repair(existing: &str, current_exe: &std::path::Path) -> bool {
-        existing != Self::start_at_login_command(current_exe)
+        Self::start_at_login_command(current_exe).is_none_or(|expected| existing != expected)
     }
 
     #[cfg(target_os = "windows")]
@@ -580,17 +587,31 @@ impl Settings {
         use winreg::enums::*;
 
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        let run_key = hkcu.open_subkey_with_flags(
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            KEY_READ | KEY_WRITE,
-        )?;
 
         if enabled {
+            // The Run key normally exists, but freshly provisioned or hardened
+            // profiles can omit it. Creating it here keeps the setting usable
+            // instead of failing on those profiles.
+            let (run_key, _) = hkcu.create_subkey(WINDOWS_RUN_KEY)?;
             let exe_path = std::env::current_exe()?;
-            let command = Self::start_at_login_command(&exe_path);
-            run_key.set_value("TokenCue", &command)?;
+            let command = Self::start_at_login_command(&exe_path).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "TokenCue desktop executable was not found beside {}",
+                    exe_path.display()
+                )
+            })?;
+            run_key.set_value(WINDOWS_RUN_VALUE, &command)?;
         } else {
-            let _ = run_key.delete_value("TokenCue");
+            let run_key = match hkcu.open_subkey_with_flags(WINDOWS_RUN_KEY, KEY_WRITE) {
+                Ok(key) => key,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                Err(error) => return Err(error.into()),
+            };
+            if let Err(error) = run_key.delete_value(WINDOWS_RUN_VALUE)
+                && error.kind() != std::io::ErrorKind::NotFound
+            {
+                return Err(error.into());
+            }
         }
 
         Ok(())
@@ -602,33 +623,42 @@ impl Settings {
         use winreg::enums::*;
 
         let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        let Ok(run_key) = hkcu.open_subkey_with_flags(
-            r"Software\Microsoft\Windows\CurrentVersion\Run",
-            KEY_READ | KEY_WRITE,
-        ) else {
+        let Ok(run_key) = hkcu.open_subkey_with_flags(WINDOWS_RUN_KEY, KEY_READ) else {
             return false;
         };
 
-        let Ok(existing) = run_key.get_value::<String, _>("TokenCue") else {
+        let Ok(existing) = run_key.get_value::<String, _>(WINDOWS_RUN_VALUE) else {
             return false;
         };
 
         match std::env::current_exe() {
             Ok(exe_path) if Self::start_at_login_command_needs_repair(&existing, &exe_path) => {
-                let command = Self::start_at_login_command(&exe_path);
-                if let Err(error) = run_key.set_value("TokenCue", &command) {
-                    tracing::warn!("Failed to repair TokenCue start-at-login command: {error}");
+                let Some(command) = Self::start_at_login_command(&exe_path) else {
+                    tracing::warn!(
+                        "TokenCue desktop executable was not found beside {}",
+                        exe_path.display()
+                    );
+                    return false;
+                };
+                match hkcu
+                    .open_subkey_with_flags(WINDOWS_RUN_KEY, KEY_WRITE)
+                    .and_then(|key| key.set_value(WINDOWS_RUN_VALUE, &command))
+                {
+                    Ok(()) => true,
+                    Err(error) => {
+                        tracing::warn!("Failed to repair TokenCue start-at-login command: {error}");
+                        false
+                    }
                 }
             }
             Err(error) => {
                 tracing::warn!(
                     "Failed to resolve current executable for start-at-login sync: {error}"
                 );
+                false
             }
-            _ => {}
+            _ => true,
         }
-
-        true
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -646,15 +676,7 @@ impl Settings {
     /// Check if start at login is actually enabled in registry
     #[cfg(target_os = "windows")]
     pub fn is_start_at_login_enabled() -> bool {
-        use winreg::RegKey;
-        use winreg::enums::*;
-
-        let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-        if let Ok(run_key) = hkcu.open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Run") {
-            run_key.get_value::<String, _>("TokenCue").is_ok()
-        } else {
-            false
-        }
+        Self::sync_start_at_login_registry()
     }
 
     #[cfg(not(target_os = "windows"))]

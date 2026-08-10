@@ -68,6 +68,13 @@ where
     })
 }
 
+fn is_startup_launch_arg(arg: &str) -> bool {
+    arg.trim()
+        .trim_start_matches(['-', '/'])
+        .replace(['-', '_'], "")
+        .eq_ignore_ascii_case("startup")
+}
+
 fn nonblank_launch_args<I, S>(args: I) -> Vec<String>
 where
     I: IntoIterator<Item = S>,
@@ -95,12 +102,13 @@ where
 {
     let args = nonblank_launch_args(args);
     let explicit_flyout_launch = should_open_fixed_flyout_from_args(&args);
+    let startup_launch = args.iter().any(|arg| is_startup_launch_arg(arg));
     let plain_desktop_launch = args.is_empty();
 
     LaunchBehavior {
         open_fixed_flyout_at_start: force_visible
             || explicit_flyout_launch
-            || (plain_desktop_launch && !start_minimized),
+            || ((plain_desktop_launch || startup_launch) && !start_minimized),
         suppress_blur_dismiss: force_visible,
     }
 }
@@ -427,6 +435,31 @@ mod tests {
     }
 
     #[test]
+    fn windows_startup_launch_obeys_start_minimized() {
+        assert_eq!(
+            launch_behavior(false, false, ["--startup"]),
+            LaunchBehavior {
+                open_fixed_flyout_at_start: true,
+                suppress_blur_dismiss: false,
+            }
+        );
+        assert_eq!(
+            launch_behavior(false, true, ["--startup"]),
+            LaunchBehavior {
+                open_fixed_flyout_at_start: false,
+                suppress_blur_dismiss: false,
+            }
+        );
+        assert_eq!(
+            launch_behavior(false, true, ["/start_up"]),
+            LaunchBehavior {
+                open_fixed_flyout_at_start: false,
+                suppress_blur_dismiss: false,
+            }
+        );
+    }
+
+    #[test]
     fn single_instance_plain_launch_opens_fixed_flyout() {
         assert!(should_open_fixed_flyout_from_instance_args(
             std::iter::empty::<&str>()
@@ -434,6 +467,7 @@ mod tests {
         assert!(should_open_fixed_flyout_from_instance_args([""]));
         assert!(should_open_fixed_flyout_from_instance_args(["  "]));
         assert!(should_open_fixed_flyout_from_instance_args(["menubar"]));
+        assert!(!should_open_fixed_flyout_from_instance_args(["--startup"]));
     }
 
     #[test]

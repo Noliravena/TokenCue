@@ -520,12 +520,12 @@ fn api_key_display_mask_is_utf8_safe() {
 }
 
 #[test]
-fn test_start_at_login_command_uses_only_the_executable_path() {
+fn test_start_at_login_command_quotes_path_and_marks_startup_launch() {
     let path = std::path::PathBuf::from(r"C:\Program Files\TokenCue\tokencue-desktop.exe");
-    let command = Settings::start_at_login_command(&path);
+    let command = Settings::start_at_login_command(&path).expect("desktop command");
     assert_eq!(
         command,
-        "\"C:\\Program Files\\TokenCue\\tokencue-desktop.exe\""
+        "\"C:\\Program Files\\TokenCue\\tokencue-desktop.exe\" --startup"
     );
     assert!(!command.contains("menubar"));
 }
@@ -538,20 +538,31 @@ fn test_start_at_login_prefers_desktop_sibling_when_called_from_cli() {
     std::fs::write(&cli_path, b"cli").expect("write cli");
     std::fs::write(&desktop_path, b"desktop").expect("write desktop");
 
-    let command = Settings::start_at_login_command(&cli_path);
+    let command = Settings::start_at_login_command(&cli_path).expect("desktop sibling command");
 
-    assert_eq!(command, format!("\"{}\"", desktop_path.display()));
+    assert_eq!(command, format!("\"{}\" --startup", desktop_path.display()));
 }
 
 #[test]
-fn test_start_at_login_keeps_current_exe_when_desktop_sibling_missing() {
+fn test_start_at_login_rejects_cli_when_desktop_sibling_missing() {
     let temp = tempfile::tempdir().expect("temp dir");
     let cli_path = temp.path().join("tokencue-cli.exe");
     std::fs::write(&cli_path, b"cli").expect("write cli");
 
-    let command = Settings::start_at_login_command(&cli_path);
+    assert!(Settings::start_at_login_command(&cli_path).is_none());
+}
 
-    assert_eq!(command, format!("\"{}\"", cli_path.display()));
+#[test]
+fn test_start_at_login_recognizes_the_real_tokencue_cli_filename() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let cli_path = temp.path().join("tokencue.exe");
+    let desktop_path = temp.path().join("tokencue-desktop.exe");
+    std::fs::write(&cli_path, b"cli").expect("write cli");
+    std::fs::write(&desktop_path, b"desktop").expect("write desktop");
+
+    let command = Settings::start_at_login_command(&cli_path).expect("desktop sibling command");
+
+    assert_eq!(command, format!("\"{}\" --startup", desktop_path.display()));
 }
 
 #[test]
@@ -561,7 +572,7 @@ fn test_start_at_login_repairs_stale_cli_command_after_update() {
     let desktop_path = temp.path().join("tokencue-desktop.exe");
     std::fs::write(&cli_path, b"cli").expect("write cli");
     std::fs::write(&desktop_path, b"desktop").expect("write desktop");
-    let stale_command = format!("\"{}\"", cli_path.display());
+    let stale_command = format!("\"{}\" --startup", cli_path.display());
 
     assert!(Settings::start_at_login_command_needs_repair(
         &stale_command,
@@ -574,7 +585,7 @@ fn test_start_at_login_keeps_current_desktop_command_after_update() {
     let temp = tempfile::tempdir().expect("temp dir");
     let desktop_path = temp.path().join("tokencue-desktop.exe");
     std::fs::write(&desktop_path, b"desktop").expect("write desktop");
-    let current_command = format!("\"{}\"", desktop_path.display());
+    let current_command = format!("\"{}\" --startup", desktop_path.display());
 
     assert!(!Settings::start_at_login_command_needs_repair(
         &current_command,
@@ -589,10 +600,23 @@ fn test_start_at_login_repairs_legacy_desktop_command_after_update() {
     let stale_desktop_path = temp.path().join("old-tokencue-desktop.exe");
     std::fs::write(&desktop_path, b"desktop").expect("write desktop");
     std::fs::write(&stale_desktop_path, b"stale desktop").expect("write stale desktop");
-    let stale_command = format!("\"{}\"", stale_desktop_path.display());
+    let stale_command = format!("\"{}\" --startup", stale_desktop_path.display());
 
     assert!(Settings::start_at_login_command_needs_repair(
         &stale_command,
+        &desktop_path
+    ));
+}
+
+#[test]
+fn test_start_at_login_repairs_legacy_command_without_startup_marker() {
+    let temp = tempfile::tempdir().expect("temp dir");
+    let desktop_path = temp.path().join("tokencue-desktop.exe");
+    std::fs::write(&desktop_path, b"desktop").expect("write desktop");
+    let legacy_command = format!("\"{}\"", desktop_path.display());
+
+    assert!(Settings::start_at_login_command_needs_repair(
+        &legacy_command,
         &desktop_path
     ));
 }
