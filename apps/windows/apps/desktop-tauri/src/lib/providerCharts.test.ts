@@ -5,6 +5,7 @@ describe("providerSupportsChartData", () => {
   it("keeps chart fetches limited to providers with chart/local usage data", () => {
     expect(providerSupportsChartData("codex")).toBe(true);
     expect(providerSupportsChartData("claude")).toBe(true);
+    expect(providerSupportsChartData("grok")).toBe(true);
     expect(providerSupportsChartData("openai")).toBe(true);
     expect(providerSupportsChartData("OpenAI")).toBe(true);
 

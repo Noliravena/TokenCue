@@ -8,4 +8,12 @@ describe("provider icon registry", () => {
       expect(PROVIDER_ICON_REGISTRY[id], id).toBeDefined();
     }
   });
+
+  it("renders Grok as a transparent single-ink mark instead of a solid tile", () => {
+    const svg = PROVIDER_ICON_REGISTRY.grok.svgPath;
+
+    expect(svg).toBeDefined();
+    expect(svg).toContain('fill="currentColor"');
+    expect(svg).not.toContain("<rect");
+  });
 });

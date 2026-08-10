@@ -17,7 +17,7 @@ const LOCAL_SUMMARY_DAYS: u32 = 30;
 /// Providers with a real per-day local breakdown (JSONL transcript scanners).
 /// Everything else only reports a billing-period total, which cannot be
 /// spread across calendar days without inventing numbers.
-const DAILY_HISTORY_PROVIDERS: [&str; 2] = ["codex", "claude"];
+const DAILY_HISTORY_PROVIDERS: [&str; 3] = ["codex", "claude", "grok"];
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +28,13 @@ pub struct UsageSpendRow {
     pub thirty_day: Option<f64>,
     pub currency: String,
     pub source: String,
+    /// Remaining provider balance when available. This must not be added to
+    /// spend totals.
+    pub balance: Option<f64>,
+    /// Current provider billing-quota usage when the upstream service exposes
+    /// a percentage but no monetary amount.
+    pub usage_percent: Option<f64>,
+    pub resets_at: Option<String>,
 }
 
 /// One calendar day of merged local spend, oldest first.
@@ -70,7 +77,7 @@ fn build_usage_spend_summary(cached: &[ProviderUsageSnapshot]) -> UsageSpendSumm
     let mut rows = Vec::new();
     let local_daily = load_daily_histories();
 
-    // Local JSONL scanners for Codex / Claude (primary spend sources). Do not
+    // Local JSONL scanners for Codex / Claude / Grok (primary spend sources). Do not
     // manufacture zero-dollar rows when the corresponding logs do not exist.
     for (provider_id, history) in &local_daily {
         if !history.has_data {
@@ -79,6 +86,7 @@ fn build_usage_spend_summary(cached: &[ProviderUsageSnapshot]) -> UsageSpendSumm
         let display_name = match *provider_id {
             "codex" => "Codex",
             "claude" => "Claude",
+            "grok" => "Grok",
             _ => continue,
         };
         rows.push(UsageSpendRow {
@@ -87,31 +95,35 @@ fn build_usage_spend_summary(cached: &[ProviderUsageSnapshot]) -> UsageSpendSumm
             seven_day: Some(period_total(history, 7)),
             thirty_day: Some(period_total(history, LOCAL_SUMMARY_DAYS as usize)),
             currency: "USD".into(),
-            source: "local logs".into(),
+            source: if *provider_id == "grok" {
+                "local Grok CLI logs (estimated)".into()
+            } else {
+                "local logs".into()
+            },
+            balance: None,
+            usage_percent: None,
+            resets_at: None,
         });
     }
 
-    // Surface any other provider cost snapshots from the last refresh (period
-    // costs, not calendar 7d/30d — shown under thirty_day only).
+    // Surface every live provider snapshot not already covered by a real local
+    // daily scanner. Period spend, balances, and quota percentages retain
+    // distinct semantics in the row model.
     for snapshot in cached {
-        if snapshot.provider_id == "codex" || snapshot.provider_id == "claude" {
+        // Prefer real day-level local logs, but fall back to a live provider
+        // snapshot when those logs are unavailable (for example a fresh
+        // install or an API-only Claude account).
+        if local_daily
+            .iter()
+            .any(|(provider_id, history)| history.has_data && *provider_id == snapshot.provider_id)
+        {
             continue;
         }
-        let Some(cost) = &snapshot.cost else {
-            continue;
-        };
-        rows.push(UsageSpendRow {
-            provider_id: snapshot.provider_id.clone(),
-            display_name: if snapshot.display_name.is_empty() {
-                snapshot.provider_id.clone()
-            } else {
-                snapshot.display_name.clone()
-            },
-            seven_day: None,
-            thirty_day: Some(cost.used),
-            currency: cost.currency_code.clone(),
-            source: format!("period ({})", cost.period),
-        });
+        if let Some(cost) = &snapshot.cost {
+            rows.push(cost_snapshot_row(snapshot, cost));
+        } else if let Some(row) = quota_snapshot_row(snapshot) {
+            rows.push(row);
+        }
     }
 
     let daily = merge_daily_histories(&local_daily);
@@ -120,6 +132,78 @@ fn build_usage_spend_summary(cached: &[ProviderUsageSnapshot]) -> UsageSpendSumm
     let today = daily.last().map(|point| point.value);
 
     UsageSpendSummary { rows, today, daily }
+}
+
+fn display_name(snapshot: &ProviderUsageSnapshot) -> String {
+    if snapshot.display_name.is_empty() {
+        snapshot.provider_id.clone()
+    } else {
+        snapshot.display_name.clone()
+    }
+}
+
+/// Several providers expose a wallet/credit balance through the shared cost
+/// bridge. Older implementations encoded that value in `used` or `limit`, so
+/// recognize the period label and keep balances out of 7/30-day spend totals.
+fn cost_snapshot_row(
+    snapshot: &ProviderUsageSnapshot,
+    cost: &super::CostSnapshotBridge,
+) -> UsageSpendRow {
+    let is_balance_only = cost.period.to_ascii_lowercase().contains("balance")
+        || (cost.balance.is_some() && cost.used == 0.0 && cost.limit.is_none());
+    let balance = if is_balance_only {
+        cost.balance
+            .or_else(|| (cost.used == 0.0).then_some(cost.limit).flatten())
+            .or(Some(cost.used))
+    } else {
+        cost.balance
+    }
+    .filter(|value| value.is_finite() && *value >= 0.0);
+
+    UsageSpendRow {
+        provider_id: snapshot.provider_id.clone(),
+        display_name: display_name(snapshot),
+        seven_day: None,
+        thirty_day: (!is_balance_only).then_some(cost.used),
+        currency: cost.currency_code.clone(),
+        source: if is_balance_only {
+            format!("balance ({})", cost.period)
+        } else {
+            format!("period ({})", cost.period)
+        },
+        balance,
+        usage_percent: None,
+        resets_at: cost.resets_at.clone(),
+    }
+}
+
+/// Providers without a monetary snapshot may still expose a genuine quota
+/// percentage (for example Grok/SuperGrok). Include every numeric quota rather
+/// than maintaining a provider allow-list, while excluding informational rows
+/// whose 0% value is only a presentation placeholder.
+fn quota_snapshot_row(snapshot: &ProviderUsageSnapshot) -> Option<UsageSpendRow> {
+    // Grok's web RPC percentage is a consumer quota signal, not USD spend.
+    // The Spend tab uses the Grok CLI token-log estimate above and must never
+    // relabel the quota percentage as money.
+    if snapshot.provider_id == "grok"
+        || snapshot.error.is_some()
+        || snapshot.primary.is_informational
+        || !snapshot.primary.used_percent.is_finite()
+    {
+        return None;
+    }
+
+    Some(UsageSpendRow {
+        provider_id: snapshot.provider_id.clone(),
+        display_name: display_name(snapshot),
+        seven_day: None,
+        thirty_day: None,
+        currency: String::new(),
+        source: "provider quota".into(),
+        balance: None,
+        usage_percent: Some(snapshot.primary.used_percent.clamp(0.0, 100.0)),
+        resets_at: snapshot.primary.resets_at.clone(),
+    })
 }
 
 fn load_daily_histories() -> Vec<(&'static str, DailyCostHistory)> {
@@ -165,6 +249,9 @@ fn period_total(history: &DailyCostHistory, days: usize) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokencue::core::{
+        ProviderFetchResult, ProviderId, ProviderMetadata, RateWindow, UsageSnapshot,
+    };
 
     fn history(has_data: bool, values: &[(&str, f64)]) -> DailyCostHistory {
         DailyCostHistory {
@@ -231,5 +318,114 @@ mod tests {
 
         assert_eq!(period_total(&history, 2), 5.0);
         assert_eq!(period_total(&history, 30), 15.0);
+    }
+
+    #[test]
+    fn quota_without_cost_is_exposed_without_fabricating_currency_spend() {
+        let resets = chrono::Utc::now() + chrono::Duration::days(12);
+        let metadata = ProviderMetadata {
+            id: ProviderId::Copilot,
+            display_name: "GitHub Copilot",
+            session_label: "Premium requests",
+            weekly_label: "Chat",
+            supports_opus: false,
+            supports_credits: false,
+            default_enabled: false,
+            is_primary: false,
+            dashboard_url: None,
+            status_page_url: None,
+        };
+        let result = ProviderFetchResult::new(
+            UsageSnapshot::new(RateWindow::with_details(37.5, None, Some(resets), None)),
+            "api",
+        );
+        let snapshot =
+            ProviderUsageSnapshot::from_fetch_result(ProviderId::Copilot, &metadata, &result);
+
+        let row = quota_snapshot_row(&snapshot).expect("quota row");
+        assert_eq!(row.provider_id, "copilot");
+        assert_eq!(row.source, "provider quota");
+        assert_eq!(row.usage_percent, Some(37.5));
+        assert_eq!(row.seven_day, None);
+        assert_eq!(row.thirty_day, None);
+        assert_eq!(row.balance, None);
+        assert!(row.currency.is_empty());
+        assert_eq!(row.resets_at, Some(resets.to_rfc3339()));
+    }
+
+    #[test]
+    fn grok_web_quota_is_not_exposed_as_spend() {
+        let metadata = ProviderMetadata {
+            id: ProviderId::Grok,
+            display_name: "Grok",
+            session_label: "Monthly",
+            weekly_label: "On-demand",
+            supports_opus: false,
+            supports_credits: false,
+            default_enabled: false,
+            is_primary: false,
+            dashboard_url: None,
+            status_page_url: None,
+        };
+        let result =
+            ProviderFetchResult::new(UsageSnapshot::new(RateWindow::new(37.5)), "grok-browser");
+        let snapshot =
+            ProviderUsageSnapshot::from_fetch_result(ProviderId::Grok, &metadata, &result);
+
+        assert!(quota_snapshot_row(&snapshot).is_none());
+    }
+
+    #[test]
+    fn balance_snapshot_is_not_counted_as_period_spend() {
+        let metadata = ProviderMetadata {
+            id: ProviderId::Moonshot,
+            display_name: "Moonshot",
+            session_label: "Balance",
+            weekly_label: "",
+            supports_opus: false,
+            supports_credits: false,
+            default_enabled: false,
+            is_primary: false,
+            dashboard_url: None,
+            status_page_url: None,
+        };
+        let result = ProviderFetchResult::new(
+            UsageSnapshot::new(RateWindow::informational("$12.50 remaining")),
+            "api",
+        )
+        .with_cost(tokencue::core::CostSnapshot::new(0.0, "USD", "Credits").with_balance(12.5));
+        let snapshot =
+            ProviderUsageSnapshot::from_fetch_result(ProviderId::Moonshot, &metadata, &result);
+
+        let row = cost_snapshot_row(&snapshot, snapshot.cost.as_ref().expect("cost"));
+        assert_eq!(row.thirty_day, None);
+        assert_eq!(row.balance, Some(12.5));
+        assert_eq!(row.currency, "USD");
+    }
+
+    #[test]
+    fn legacy_balance_encoded_in_used_is_normalized() {
+        let metadata = ProviderMetadata {
+            id: ProviderId::Devin,
+            display_name: "Devin",
+            session_label: "ACUs",
+            weekly_label: "",
+            supports_opus: false,
+            supports_credits: true,
+            default_enabled: false,
+            is_primary: false,
+            dashboard_url: None,
+            status_page_url: None,
+        };
+        let result =
+            ProviderFetchResult::new(UsageSnapshot::new(RateWindow::new(20.0)), "api").with_cost(
+                tokencue::core::CostSnapshot::new(8.75, "USD", "Extra usage balance"),
+            );
+        let snapshot =
+            ProviderUsageSnapshot::from_fetch_result(ProviderId::Devin, &metadata, &result);
+
+        let row = cost_snapshot_row(&snapshot, snapshot.cost.as_ref().expect("cost"));
+        assert_eq!(row.thirty_day, None);
+        assert_eq!(row.balance, Some(8.75));
     }
 }

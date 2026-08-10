@@ -43,7 +43,7 @@ pub struct DailyUsageBreakdown {
     pub total_credits_used: f64,
 }
 
-/// Real local usage summary from Codex / Claude log files.
+/// Real local usage summary from Codex / Claude / Grok log files.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderLocalUsageSummary {
@@ -400,6 +400,7 @@ fn scan_local_cost(
     match provider_id {
         "codex" => Some(scanner.scan_codex_with_cancel(cancel)),
         "claude" => Some(scanner.scan_claude_with_cancel(cancel)),
+        "grok" => Some(scanner.scan_grok_with_cancel(cancel)),
         _ => None,
     }
 }

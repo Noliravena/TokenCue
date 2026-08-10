@@ -1,4 +1,4 @@
-//! Local cost-usage scanner for Codex and Claude
+//! Local cost-usage scanner for Codex, Claude, and Grok CLI
 //!
 //! Scans local JSONL log files to aggregate token usage and calculate costs.
 //!
@@ -449,6 +449,17 @@ impl CostScanner {
         summary
     }
 
+    /// Scan Grok CLI inference metadata from `~/.grok/logs/unified.jsonl`.
+    /// Dollar values are API-equivalent estimates using the public Grok 4.5
+    /// token rate card; the consumer billing RPC itself exposes no dollar sum.
+    pub fn scan_grok(&self) -> CostSummary {
+        self.scan_grok_with_cancel(None)
+    }
+
+    pub fn scan_grok_with_cancel(&self, cancel: Option<&AtomicBool>) -> CostSummary {
+        crate::grok_costs::scan_default_log(self.days, cancel).summary
+    }
+
     fn get_codex_sessions_dirs(&self) -> Vec<PathBuf> {
         if let Some(dirs) = &self.sessions_dirs_override {
             return dirs.clone();
@@ -868,6 +879,7 @@ pub fn has_cost_usage_sources() -> bool {
         .iter()
         .any(|dir| dir.exists())
         || scanner.get_claude_projects_dir().exists()
+        || crate::grok_costs::default_log_path().exists()
         || crate::pi_session_cost::pi_compatible_session_roots(dirs::home_dir())
             .iter()
             .any(|dir| dir.exists())
@@ -934,6 +946,15 @@ pub fn get_daily_cost_history_with_availability(provider: &str, days: u32) -> Da
                     });
                 };
                 scanner.walk_claude_files(&projects_dir, &cutoff, None, &mut handle_file);
+            }
+        }
+        "grok" => {
+            let scan = crate::grok_costs::scan_default_log(days, None);
+            has_data = scan.has_data;
+            for (day, cost) in scan.daily_costs {
+                if let Some(slot) = daily_costs.get_mut(&day) {
+                    *slot = cost;
+                }
             }
         }
         _ => {}

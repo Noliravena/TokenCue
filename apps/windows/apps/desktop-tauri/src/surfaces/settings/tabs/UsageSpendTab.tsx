@@ -33,6 +33,31 @@ function formatMoney(
   }
 }
 
+function formatRowAmount(
+  row: UsageSpendRow,
+  field: "sevenDay" | "thirtyDay",
+  locale: string,
+  usedSuffix: string,
+  leftSuffix: string,
+): string {
+  if (
+    field === "thirtyDay" &&
+    row.usagePercent != null &&
+    Number.isFinite(row.usagePercent)
+  ) {
+    return `${Math.round(row.usagePercent)}% ${usedSuffix}`;
+  }
+  if (
+    field === "thirtyDay" &&
+    row.balance != null &&
+    Number.isFinite(row.balance) &&
+    row.thirtyDay == null
+  ) {
+    return `${formatMoney(row.balance, row.currency, locale)} ${leftSuffix}`;
+  }
+  return formatMoney(row[field], row.currency, locale);
+}
+
 /** The local JSONL cost scanners price everything in USD. */
 const LOCAL_SCANNER_CURRENCY = "USD";
 
@@ -119,9 +144,9 @@ function renderSharePng(
       const y = y0 + (idx + 1) * rowH;
       const cells = [
         row.displayName,
-        formatMoney(row.sevenDay, row.currency, locale),
-        formatMoney(row.thirtyDay, row.currency, locale),
-        row.currency || "USD",
+        formatRowAmount(row, "sevenDay", locale, "used", "left"),
+        formatRowAmount(row, "thirtyDay", locale, "used", "left"),
+        row.usagePercent == null ? row.currency || "USD" : "—",
         row.source,
       ];
       let cx = pad;
@@ -289,9 +314,25 @@ export default function UsageSpendTab(_props: TabProps) {
                     <span>{row.displayName}</span>
                   </span>
                 </td>
-                <td>{formatMoney(row.sevenDay, row.currency, locale)}</td>
-                <td>{formatMoney(row.thirtyDay, row.currency, locale)}</td>
-                <td>{row.currency || "USD"}</td>
+                <td>
+                  {formatRowAmount(
+                    row,
+                    "sevenDay",
+                    locale,
+                    t("PanelUsedSuffix"),
+                    t("PanelLeftSuffix"),
+                  )}
+                </td>
+                <td>
+                  {formatRowAmount(
+                    row,
+                    "thirtyDay",
+                    locale,
+                    t("PanelUsedSuffix"),
+                    t("PanelLeftSuffix"),
+                  )}
+                </td>
+                <td>{row.usagePercent == null ? row.currency || "USD" : "—"}</td>
                 <td className="usage-spend-table__source">{row.source}</td>
               </tr>
             ))}

@@ -320,6 +320,11 @@ export interface UsageSpendRow {
   thirtyDay: number | null;
   currency: string;
   source: string;
+  /** Remaining provider balance; excluded from spend totals. */
+  balance?: number | null;
+  /** Current billing-window quota when the provider does not expose money. */
+  usagePercent?: number | null;
+  resetsAt?: string | null;
 }
 
 /** One local calendar day of merged spend, oldest first. */
