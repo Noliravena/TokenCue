@@ -323,7 +323,8 @@ impl OpenCodeGoProvider {
         }
         let mut result = ProviderFetchResult::new(usage, "web");
         if let Some(balance) = balance {
-            result = result.with_cost(CostSnapshot::new(balance, "USD", "Zen balance"));
+            result = result
+                .with_cost(CostSnapshot::new(0.0, "USD", "Zen balance").with_balance(balance));
         }
         Ok(result)
     }

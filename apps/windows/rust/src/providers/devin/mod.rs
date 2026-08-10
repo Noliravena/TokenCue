@@ -138,7 +138,8 @@ fn snapshot_from_quota(value: &Value, org: &str) -> UsageSnapshot {
 fn fetch_result_from_quota(value: &Value, org: &str) -> ProviderFetchResult {
     let mut result = ProviderFetchResult::new(snapshot_from_quota(value, org), "api");
     if let Some(balance) = extra_usage_balance(value) {
-        result = result.with_cost(CostSnapshot::new(balance, "USD", "Extra usage balance"));
+        result = result
+            .with_cost(CostSnapshot::new(0.0, "USD", "Extra usage balance").with_balance(balance));
     }
     result
 }
@@ -206,7 +207,8 @@ mod tests {
         );
 
         let cost = result.cost.unwrap();
-        assert_eq!(cost.used, 12.34);
+        assert_eq!(cost.used, 0.0);
+        assert_eq!(cost.balance, Some(12.34));
         assert_eq!(cost.period, "Extra usage balance");
     }
 
@@ -217,6 +219,8 @@ mod tests {
             "org/demo",
         );
 
-        assert_eq!(result.cost.unwrap().used, 70.87);
+        let cost = result.cost.unwrap();
+        assert_eq!(cost.used, 0.0);
+        assert_eq!(cost.balance, Some(70.87));
     }
 }

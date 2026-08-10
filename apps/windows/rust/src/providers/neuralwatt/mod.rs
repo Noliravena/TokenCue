@@ -311,7 +311,9 @@ fn snapshot_from_quota(
         .balance
         .as_ref()
         .and_then(prepaid_remaining)
-        .map(|remaining| CostSnapshot::new(remaining, "USD", "Neuralwatt prepaid balance"));
+        .map(|remaining| {
+            CostSnapshot::new(0.0, "USD", "Neuralwatt prepaid balance").with_balance(remaining)
+        });
 
     let _month = body.usage.as_ref().and_then(|u| u.current_month.as_ref());
     Ok((snap, cost))
@@ -353,6 +355,8 @@ mod tests {
         assert!(snap.login_method.as_deref().unwrap().contains("Starter"));
         assert_eq!(snap.extra_rate_windows.len(), 1);
         assert!((snap.extra_rate_windows[0].window.used_percent - 20.0).abs() < 0.01);
-        assert!((cost.unwrap().used - 8.5).abs() < 0.001);
+        let cost = cost.unwrap();
+        assert_eq!(cost.used, 0.0);
+        assert_eq!(cost.balance, Some(8.5));
     }
 }

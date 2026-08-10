@@ -486,7 +486,7 @@ impl CodexApi {
             .and_then(|v| v.as_f64())
             .unwrap_or(0.0);
 
-        Some(CostSnapshot::new(balance, "USD", "Credits"))
+        Some(CostSnapshot::new(0.0, "USD", "Credits").with_balance(balance))
     }
 
     fn build_result(
@@ -582,7 +582,7 @@ impl CodexApi {
                 {
                     Some(limit)
                 } else {
-                    Some(CostSnapshot::new(balance, "USD", "Credits"))
+                    Some(CostSnapshot::new(0.0, "USD", "Credits").with_balance(balance))
                 }
             } else {
                 None
@@ -738,8 +738,9 @@ impl SpendControlLimitSnapshot {
                     .map(|remaining| limit * (1.0 - (remaining / 100.0)))
             })
             .unwrap_or_else(|| (limit - balance).max(0.0));
-        let mut cost =
-            CostSnapshot::new(used.clamp(0.0, limit), "USD", "Monthly credits").with_limit(limit);
+        let mut cost = CostSnapshot::new(used.clamp(0.0, limit), "USD", "Monthly credits")
+            .with_limit(limit)
+            .with_balance(balance);
         if let Some(resets_at) = timestamp_to_datetime(self.resets_at) {
             cost = cost.with_resets_at(resets_at);
         }
@@ -1238,6 +1239,7 @@ mod tests {
         let cost = cost.expect("cost");
         assert_eq!(cost.used, 12.5);
         assert_eq!(cost.limit, Some(20.0));
+        assert_eq!(cost.balance, Some(7.5));
         assert!(cost.resets_at.is_some());
     }
 
@@ -1269,5 +1271,6 @@ mod tests {
         let cost = cost.expect("cost");
         assert_eq!(cost.used, 40.0);
         assert_eq!(cost.limit, Some(100.0));
+        assert_eq!(cost.balance, Some(60.0));
     }
 }

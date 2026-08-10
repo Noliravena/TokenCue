@@ -194,7 +194,7 @@ fn snapshot_from_parts(
         );
     }
 
-    let cost = CostSnapshot::new(0.0, currency, "balance").with_limit(balance.max(0.0));
+    let cost = CostSnapshot::new(0.0, currency, "balance").with_balance(balance.max(0.0));
     ProviderFetchResult::new(snapshot, "api").with_cost(cost)
 }
 
@@ -304,7 +304,10 @@ mod tests {
             }),
         );
 
-        assert_eq!(result.cost.unwrap().limit, Some(8.059489));
+        let cost = result.cost.unwrap();
+        assert_eq!(cost.used, 0.0);
+        assert_eq!(cost.limit, None);
+        assert_eq!(cost.balance, Some(8.059489));
         assert!(
             result
                 .usage

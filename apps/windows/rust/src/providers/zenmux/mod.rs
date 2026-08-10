@@ -238,11 +238,7 @@ fn payg_cost_from_balance(value: &serde_json::Value) -> Result<CostSnapshot, Pro
             "ZenMux balance currency is not USD".into(),
         ));
     }
-    Ok(CostSnapshot::new(
-        env.data.total_credits,
-        "USD",
-        "ZenMux PAYG balance",
-    ))
+    Ok(CostSnapshot::new(0.0, "USD", "ZenMux PAYG balance").with_balance(env.data.total_credits))
 }
 
 fn capitalize(s: &str) -> String {
@@ -296,7 +292,8 @@ mod tests {
             "data": { "currency": "USD", "total_credits": 12.5 }
         });
         let cost = payg_cost_from_balance(&value).unwrap();
-        assert!((cost.used - 12.5).abs() < 0.001);
+        assert_eq!(cost.used, 0.0);
+        assert_eq!(cost.balance, Some(12.5));
         assert_eq!(cost.currency_code, "USD");
     }
 }

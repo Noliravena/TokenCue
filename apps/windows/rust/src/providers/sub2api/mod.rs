@@ -517,7 +517,7 @@ fn snapshot_from_parsed(parsed: ParsedUsage) -> ProviderFetchResult {
             if let Some(balance) = parsed.balance {
                 cost = Some(
                     CostSnapshot::new(0.0, normalize_currency(&parsed.unit), "balance")
-                        .with_limit(balance.max(0.0)),
+                        .with_balance(balance.max(0.0)),
                 );
             }
             snap
@@ -571,7 +571,7 @@ fn snapshot_from_parsed(parsed: ParsedUsage) -> ProviderFetchResult {
             let description = format!("{} balance", currency_string(balance, &parsed.unit));
             cost = Some(
                 CostSnapshot::new(0.0, normalize_currency(&parsed.unit), "balance")
-                    .with_limit(balance.max(0.0)),
+                    .with_balance(balance.max(0.0)),
             );
             UsageSnapshot::new(RateWindow::informational(description))
         }
@@ -938,7 +938,10 @@ mod tests {
                 .is_some_and(|d| d.contains("$2.50") && d.contains("day"))
         );
         assert!(result.cost.is_some());
-        assert_eq!(result.cost.as_ref().unwrap().limit, Some(12.0));
+        let cost = result.cost.as_ref().unwrap();
+        assert_eq!(cost.used, 0.0);
+        assert_eq!(cost.limit, None);
+        assert_eq!(cost.balance, Some(12.0));
         assert!(result.usage.account_organization.is_none());
         assert!(
             result
@@ -1010,7 +1013,9 @@ mod tests {
             Some("Wallet plan (unrestricted)")
         );
         let cost = result.cost.unwrap();
-        assert_eq!(cost.limit, Some(42.5));
+        assert_eq!(cost.used, 0.0);
+        assert_eq!(cost.limit, None);
+        assert_eq!(cost.balance, Some(42.5));
         assert_eq!(cost.period, "balance");
     }
 
