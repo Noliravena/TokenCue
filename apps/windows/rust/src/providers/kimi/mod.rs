@@ -130,6 +130,9 @@ impl KimiProvider {
 
     /// Extract JWT token from kimi-auth cookie
     fn get_auth_token(&self) -> Result<String, ProviderError> {
+        if crate::core::credentials::keychain_access_disabled() {
+            return Err(ProviderError::NoCookies);
+        }
         let mut saw_cookie_header = false;
         let mut last_error = None;
         for domain in KIMI_COOKIE_DOMAINS {

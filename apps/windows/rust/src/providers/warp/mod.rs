@@ -145,7 +145,7 @@ impl WarpProvider {
             return Ok(key.to_string());
         }
 
-        match keyring::Entry::new(WARP_CREDENTIAL_TARGET, "api_token") {
+        match crate::core::credentials::keyring_entry(WARP_CREDENTIAL_TARGET, "api_token") {
             Ok(entry) => match entry.get_password() {
                 Ok(token) => Ok(token),
                 Err(_) => std::env::var("WARP_API_KEY").map_err(|_| {

@@ -86,7 +86,10 @@ impl NanoGPTProvider {
             return Ok(key.to_string());
         }
 
-        match keyring::Entry::new(NANOGPT_CREDENTIAL_TARGET, "api_token") {
+        match crate::core::credentials::keyring_entry(
+            NANOGPT_CREDENTIAL_TARGET,
+            "api_token",
+        ) {
             Ok(entry) => match entry.get_password() {
                 Ok(token) => Ok(token),
                 Err(_) => std::env::var("NANOGPT_API_KEY").map_err(|_| {

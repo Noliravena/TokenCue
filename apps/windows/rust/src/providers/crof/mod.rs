@@ -151,7 +151,7 @@ fn super_key(
     {
         return Ok(key.trim().to_string());
     }
-    if let Ok(entry) = keyring::Entry::new(credential_target, "api_key")
+    if let Ok(entry) = crate::core::credentials::keyring_entry(credential_target, "api_key")
         && let Ok(key) = entry.get_password()
         && !key.trim().is_empty()
     {

@@ -304,6 +304,28 @@ fn fetch_context_defaults_to_manual_cookies_without_browser_import() {
 }
 
 #[test]
+fn fetch_context_does_not_decrypt_browser_cookies_when_keychain_access_is_disabled() {
+    let settings = Settings {
+        disable_keychain_access: true,
+        ..Settings::default()
+    };
+    let cookies = ManualCookies::default();
+    let api_keys = ApiKeys::default();
+    let token_accounts = HashMap::new();
+
+    let ctx = super::build_fetch_context(
+        ProviderId::Cursor,
+        &settings,
+        &cookies,
+        &api_keys,
+        &token_accounts,
+    );
+
+    assert_eq!(ctx.source_mode, SourceMode::Web);
+    assert!(ctx.manual_cookie_header.is_none());
+}
+
+#[test]
 fn fetch_context_cursor_cookie_off_stays_cli() {
     let mut settings = Settings::default();
     settings.set_cookie_source(ProviderId::Cursor, "off");

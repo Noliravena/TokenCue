@@ -20,6 +20,10 @@ pub struct DetectedBrowserBridge {
 pub fn list_detected_browsers() -> Vec<DetectedBrowserBridge> {
     use tokencue::browser::detection::BrowserDetector;
 
+    if tokencue::core::credentials::keychain_access_disabled() {
+        return Vec::new();
+    }
+
     BrowserDetector::detect_all()
         .into_iter()
         .map(|b| DetectedBrowserBridge {
@@ -49,6 +53,12 @@ pub fn import_browser_cookies(
     let pid = parse_provider_arg(&provider_id)?;
 
     let settings = Settings::load();
+    if settings.disable_keychain_access {
+        return Err(
+            "Browser cookie import is disabled by Advanced → Disable all keychain access."
+                .to_string(),
+        );
+    }
     let domain = if pid == tokencue::core::ProviderId::MiniMax {
         tokencue::providers::MiniMaxProvider::cookie_domain_for_region(Some(
             settings.api_region(pid),

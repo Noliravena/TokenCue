@@ -156,8 +156,12 @@ fn load_from_file() -> Result<ClaudeOAuthCredentials, ProviderError> {
 /// Load credentials from Claude Code's OS keychain / credential manager entry.
 fn load_from_keyring() -> Result<Option<(ClaudeOAuthCredentials, CredentialSource)>, ProviderError>
 {
+    let settings = crate::settings::Settings::load();
+    if settings.disable_keychain_access || settings.claude_avoid_keychain_prompts() {
+        return Ok(None);
+    }
     for account in keyring_account_candidates() {
-        let entry = match keyring::Entry::new(KEYRING_SERVICE, &account) {
+        let entry = match crate::core::credentials::keyring_entry(KEYRING_SERVICE, &account) {
             Ok(entry) => entry,
             Err(err) => {
                 tracing::debug!(

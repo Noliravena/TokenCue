@@ -3,6 +3,7 @@
 mod adaptive_refresh;
 mod aws_signing;
 mod cost_pricing;
+pub mod credentials;
 pub mod curl_capture;
 mod hook_transition;
 mod hooks;

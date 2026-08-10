@@ -126,7 +126,7 @@ impl ZaiProvider {
         }
 
         // Try Windows Credential Manager
-        match keyring::Entry::new(ZAI_CREDENTIAL_TARGET, "api_token") {
+        match crate::core::credentials::keyring_entry(ZAI_CREDENTIAL_TARGET, "api_token") {
             Ok(entry) => match entry.get_password() {
                 Ok(token) => Ok(token),
                 Err(_) => Self::api_token_from_env(),

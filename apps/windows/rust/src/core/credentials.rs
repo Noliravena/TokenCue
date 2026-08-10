@@ -2,6 +2,24 @@
 
 use thiserror::Error;
 
+/// Central gate for OS credential-manager and browser-cookie decryption.
+pub fn keychain_access_disabled() -> bool {
+    !keychain_access_allowed(&crate::settings::Settings::load())
+}
+
+pub fn keychain_access_allowed(settings: &crate::settings::Settings) -> bool {
+    !settings.disable_keychain_access
+}
+
+/// Open an OS credential entry only when the user has allowed keychain access.
+pub(crate) fn keyring_entry(service: &str, key: &str) -> Result<keyring::Entry, keyring::Error> {
+    if keychain_access_disabled() {
+        Err(keyring::Error::NoEntry)
+    } else {
+        keyring::Entry::new(service, key)
+    }
+}
+
 /// Errors that can occur with credential operations
 #[derive(Debug, Error)]
 pub enum CredentialError {
@@ -51,8 +69,11 @@ impl Default for WindowsCredentialStore {
 #[cfg(windows)]
 impl CredentialStore for WindowsCredentialStore {
     fn get(&self, service: &str, key: &str) -> Result<String, CredentialError> {
-        let entry = keyring::Entry::new(service, key)
-            .map_err(|e| CredentialError::Storage(e.to_string()))?;
+        if keychain_access_disabled() {
+            return Err(CredentialError::AccessDenied);
+        }
+        let entry =
+            keyring_entry(service, key).map_err(|e| CredentialError::Storage(e.to_string()))?;
         entry.get_password().map_err(|e| match e {
             keyring::Error::NoEntry => CredentialError::NotFound,
             keyring::Error::Ambiguous(_) => CredentialError::Storage("Ambiguous entry".to_string()),
@@ -61,16 +82,22 @@ impl CredentialStore for WindowsCredentialStore {
     }
 
     fn set(&self, service: &str, key: &str, value: &str) -> Result<(), CredentialError> {
-        let entry = keyring::Entry::new(service, key)
-            .map_err(|e| CredentialError::Storage(e.to_string()))?;
+        if keychain_access_disabled() {
+            return Err(CredentialError::AccessDenied);
+        }
+        let entry =
+            keyring_entry(service, key).map_err(|e| CredentialError::Storage(e.to_string()))?;
         entry
             .set_password(value)
             .map_err(|e| CredentialError::Storage(e.to_string()))
     }
 
     fn delete(&self, service: &str, key: &str) -> Result<(), CredentialError> {
-        let entry = keyring::Entry::new(service, key)
-            .map_err(|e| CredentialError::Storage(e.to_string()))?;
+        if keychain_access_disabled() {
+            return Err(CredentialError::AccessDenied);
+        }
+        let entry =
+            keyring_entry(service, key).map_err(|e| CredentialError::Storage(e.to_string()))?;
         entry.delete_credential().map_err(|e| match e {
             keyring::Error::NoEntry => CredentialError::NotFound,
             _ => CredentialError::Storage(e.to_string()),
@@ -106,5 +133,18 @@ impl OAuthCredentials {
     /// Check if the credentials have a specific scope
     pub fn has_scope(&self, scope: &str) -> bool {
         self.scopes.iter().any(|s| s == scope)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn global_keychain_preference_controls_os_credential_access() {
+        let mut settings = crate::settings::Settings::default();
+        assert!(keychain_access_allowed(&settings));
+        settings.disable_keychain_access = true;
+        assert!(!keychain_access_allowed(&settings));
     }
 }

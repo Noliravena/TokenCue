@@ -151,6 +151,9 @@ pub use zoommate::ZoomMateProvider;
 pub(crate) fn browser_cookie_header(
     domains: &[&str],
 ) -> Result<String, crate::core::ProviderError> {
+    if crate::core::credentials::keychain_access_disabled() {
+        return Err(crate::core::ProviderError::NoCookies);
+    }
     crate::browser::cookies::get_cookie_header_for_domains(domains)
         .map_err(map_browser_cookie_error)
 }
@@ -158,6 +161,9 @@ pub(crate) fn browser_cookie_header(
 pub(crate) fn browser_cookies_for_domain(
     domain: &str,
 ) -> Result<Vec<crate::browser::cookies::Cookie>, crate::core::ProviderError> {
+    if crate::core::credentials::keychain_access_disabled() {
+        return Err(crate::core::ProviderError::NoCookies);
+    }
     crate::browser::cookies::get_cookies_for_domain(domain).map_err(map_browser_cookie_error)
 }
 
@@ -183,7 +189,7 @@ pub(crate) fn resolve_api_key(
     {
         return Ok(key.trim().to_string());
     }
-    if let Ok(entry) = keyring::Entry::new(credential_target, "api_key")
+    if let Ok(entry) = crate::core::credentials::keyring_entry(credential_target, "api_key")
         && let Ok(key) = entry.get_password()
         && !key.trim().is_empty()
     {

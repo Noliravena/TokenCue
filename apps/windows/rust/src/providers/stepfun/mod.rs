@@ -162,7 +162,8 @@ impl StepFunProvider {
     }
 
     fn persist_refreshed_token(&self, token: &str) {
-        if let Ok(entry) = keyring::Entry::new(STEPFUN_CREDENTIAL_TARGET, "api_key")
+        if let Ok(entry) =
+            crate::core::credentials::keyring_entry(STEPFUN_CREDENTIAL_TARGET, "api_key")
             && let Err(error) = entry.set_password(token)
         {
             tracing::debug!("Could not persist refreshed StepFun token: {error}");
@@ -420,7 +421,7 @@ fn resolve_token(
     {
         return Ok(key.trim().to_string());
     }
-    if let Ok(entry) = keyring::Entry::new(credential_target, "api_key")
+    if let Ok(entry) = crate::core::credentials::keyring_entry(credential_target, "api_key")
         && let Ok(key) = entry.get_password()
         && !key.trim().is_empty()
     {

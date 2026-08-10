@@ -29,6 +29,7 @@ pub(crate) fn build_fetch_context(
         .and_then(|override_data| override_data.env_override.as_ref());
     let active_token_api_key = active_token_env.and_then(|env| env.values().next().cloned());
     let usage_source = SourceMode::parse(settings.usage_source(id)).unwrap_or_default();
+    let browser_cookie_access_allowed = !settings.disable_keychain_access;
     // Selected token-account key overrides a stored provider apiKey (upstream #2271 / #1183).
     let api_key = active_token_api_key.or(stored_api_key);
     let has_kimi_code_api_key =
@@ -72,11 +73,15 @@ pub(crate) fn build_fetch_context(
                 // Try browser cookie extraction as fallback when no manual cookie is set.
                 // On non-Windows this is a harmless no-op that returns an error.
                 let cookie_header = active_token_cookie.or(stored_cookie).or_else(|| {
-                    provider_cookie_domain(id, settings).and_then(|domain| {
-                        tokencue::browser::cookies::get_cookie_header(domain)
-                            .ok()
-                            .filter(|h| !h.is_empty())
-                    })
+                    browser_cookie_access_allowed
+                        .then(|| {
+                            provider_cookie_domain(id, settings).and_then(|domain| {
+                                tokencue::browser::cookies::get_cookie_header(domain)
+                                    .ok()
+                                    .filter(|h| !h.is_empty())
+                            })
+                        })
+                        .flatten()
                 });
                 (usage_source, cookie_header)
             }
@@ -97,11 +102,15 @@ pub(crate) fn build_fetch_context(
             .map(str::trim)
             .is_none_or(|s| s.is_empty())
         {
-            cookie_header = provider_cookie_domain(id, settings).and_then(|domain| {
-                tokencue::browser::cookies::get_cookie_header(domain)
-                    .ok()
-                    .filter(|h| !h.is_empty())
-            });
+            cookie_header = browser_cookie_access_allowed
+                .then(|| {
+                    provider_cookie_domain(id, settings).and_then(|domain| {
+                        tokencue::browser::cookies::get_cookie_header(domain)
+                            .ok()
+                            .filter(|h| !h.is_empty())
+                    })
+                })
+                .flatten();
         }
         source_mode = SourceMode::Web;
     }

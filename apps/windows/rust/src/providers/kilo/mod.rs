@@ -200,7 +200,7 @@ fn direct_kilo_api_key(api_key: Option<&str>) -> Option<String> {
 }
 
 fn keyring_kilo_api_key() -> Option<String> {
-    keyring::Entry::new(KILO_CREDENTIAL_TARGET, "api_key")
+    crate::core::credentials::keyring_entry(KILO_CREDENTIAL_TARGET, "api_key")
         .ok()?
         .get_password()
         .ok()

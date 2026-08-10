@@ -258,6 +258,10 @@ impl ClaudeWebApiFetcher {
             return self.fetch_with_cookie_header(&cookie_header).await;
         }
 
+        if crate::core::credentials::keychain_access_disabled() {
+            return Err(ProviderError::NoCookies);
+        }
+
         // Try multiple domains - Claude uses different domains for different services
         let domains = [
             "claude.ai",
