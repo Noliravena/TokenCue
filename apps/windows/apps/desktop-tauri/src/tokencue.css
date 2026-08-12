@@ -1810,7 +1810,7 @@ input.toggle:checked {
 
 .provider-overview__row {
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) 96px minmax(130px, 156px) 30px 38px;
+  grid-template-columns: minmax(150px, 1fr) 96px minmax(130px, 156px) 38px;
   min-height: 40px;
   align-items: center;
   gap: 10px;
@@ -1895,31 +1895,6 @@ input.toggle:checked {
 .provider-overview__row[data-level="critical"] .provider-overview__metric,
 .provider-overview__row[data-level="error"] .provider-overview__metric {
   color: var(--tb-color-critical);
-}
-
-.provider-overview__reorder {
-  display: flex;
-  opacity: 0;
-  transition: opacity 120ms ease;
-}
-
-.provider-overview__row:hover .provider-overview__reorder,
-.provider-overview__reorder:focus-within {
-  opacity: 1;
-}
-
-.provider-overview__reorder button {
-  width: 17px;
-  height: 22px;
-  padding: 0;
-  background: transparent;
-  color: var(--tb-text-secondary);
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.provider-overview__reorder button:disabled {
-  opacity: 0.25;
 }
 
 .provider-overview__toggle {

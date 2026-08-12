@@ -9,7 +9,6 @@ import { TOKENCUE_PROVIDER_MANIFEST } from "../../../generated/providerManifest"
 import { useLocale } from "../../../hooks/useLocale";
 import { useFormattedResetTime } from "../../../hooks/useFormattedResetTime";
 import { useProviders } from "../../../hooks/useProviders";
-import { reorderProviders } from "../../../lib/tauri";
 import { ProviderDetailPane } from "../providers/ProviderDetailPane";
 import { ProviderIcon } from "../../../components/providers/ProviderIcon";
 import { providerTileStyle } from "../../../components/providers/providerIcons";
@@ -48,12 +47,9 @@ function ProviderOverviewRow({
   showAsUsed,
   resetTimeRelative,
   disabled,
-  canMoveUp,
-  canMoveDown,
   t,
   onOpen,
   onToggle,
-  onMove,
 }: {
   provider: ProviderCatalogEntry;
   snapshot: ProviderUsageSnapshot | null;
@@ -61,12 +57,9 @@ function ProviderOverviewRow({
   showAsUsed: boolean;
   resetTimeRelative: boolean;
   disabled: boolean;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
   t: (key: LocaleKey) => string;
   onOpen: () => void;
   onToggle: (enabled: boolean) => void;
-  onMove: (delta: -1 | 1) => void;
 }) {
   const reset = useFormattedResetTime(
     snapshot?.primary.resetsAt ?? null,
@@ -116,24 +109,6 @@ function ProviderOverviewRow({
       </button>
       <span className="provider-overview__auth">{authSummary(provider.id)}</span>
       <span className="provider-overview__metric">{metric}</span>
-      <span className="provider-overview__reorder">
-        <button
-          type="button"
-          disabled={!canMoveUp || disabled}
-          aria-label={t("ProviderMoveUp").replace("{}", provider.displayName)}
-          onClick={() => onMove(-1)}
-        >
-          ↑
-        </button>
-        <button
-          type="button"
-          disabled={!canMoveDown || disabled}
-          aria-label={t("ProviderMoveDown").replace("{}", provider.displayName)}
-          onClick={() => onMove(1)}
-        >
-          ↓
-        </button>
-      </span>
       <label className="provider-overview__toggle">
         <input
           type="checkbox"
@@ -158,15 +133,7 @@ export default function ProvidersTab({
   const { providers: snapshots } = useProviders();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [orderedProviders, setOrderedProviders] = useState(providers);
-  const [previousProviders, setPreviousProviders] = useState(providers);
-  const [reorderError, setReorderError] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement | null>(null);
-
-  if (providers !== previousProviders) {
-    setPreviousProviders(providers);
-    setOrderedProviders(providers);
-  }
 
   const enabled = useMemo(
     () => new Set(settings.enabledProviders),
@@ -180,7 +147,7 @@ export default function ProvidersTab({
     const order = new Map(
       settings.providerOrder?.map((id, index) => [id, index]) ?? [],
     );
-    return [...orderedProviders].sort((left, right) => {
+    return [...providers].sort((left, right) => {
       const leftEnabled = enabled.has(left.id) ? 0 : 1;
       const rightEnabled = enabled.has(right.id) ? 0 : 1;
       if (leftEnabled !== rightEnabled) return leftEnabled - rightEnabled;
@@ -190,7 +157,7 @@ export default function ProvidersTab({
         left.displayName.localeCompare(right.displayName)
       );
     });
-  }, [enabled, orderedProviders, settings.providerOrder]);
+  }, [enabled, providers, settings.providerOrder]);
   const normalizedSearch = search.trim().toLocaleLowerCase();
   const visibleProviders = normalizedSearch
     ? rankedProviders.filter(
@@ -209,29 +176,9 @@ export default function ProvidersTab({
     if (on) next.add(id);
     else next.delete(id);
     set({
-      enabledProviders: orderedProviders
+      enabledProviders: providers
         .map((provider) => provider.id)
         .filter((providerId) => next.has(providerId)),
-    });
-  };
-
-  const move = (id: string, delta: -1 | 1) => {
-    const current = orderedProviders.map((provider) => provider.id);
-    const from = current.indexOf(id);
-    const to = from + delta;
-    if (from < 0 || to < 0 || to >= current.length) return;
-    const nextIds = [...current];
-    nextIds.splice(from, 1);
-    nextIds.splice(to, 0, id);
-    const byId = new Map(orderedProviders.map((provider) => [provider.id, provider]));
-    const next = nextIds
-      .map((providerId) => byId.get(providerId))
-      .filter((provider): provider is ProviderCatalogEntry => Boolean(provider));
-    setReorderError(null);
-    setOrderedProviders(next);
-    void reorderProviders(nextIds).catch((error: unknown) => {
-      setOrderedProviders(providers);
-      setReorderError(String(error));
     });
   };
 
@@ -291,7 +238,7 @@ export default function ProvidersTab({
         </header>
 
         <div className="provider-overview__list">
-          {visibleProviders.map((provider, index) => (
+          {visibleProviders.map((provider) => (
             <ProviderOverviewRow
               key={provider.id}
               provider={provider}
@@ -300,12 +247,9 @@ export default function ProvidersTab({
               showAsUsed={settings.showAsUsed}
               resetTimeRelative={settings.resetTimeRelative}
               disabled={saving}
-              canMoveUp={index > 0}
-              canMoveDown={index < visibleProviders.length - 1}
               t={t}
               onOpen={() => setSelectedId(provider.id)}
               onToggle={(on) => toggle(provider.id, on)}
-              onMove={(delta) => move(provider.id, delta)}
             />
           ))}
           {visibleProviders.length === 0 ? (
@@ -313,11 +257,6 @@ export default function ProvidersTab({
           ) : null}
         </div>
       </div>
-      {reorderError ? (
-        <p className="provider-overview__hint" role="alert">
-          {t("ErrorPrefix")} {reorderError}
-        </p>
-      ) : null}
       <p className="provider-overview__hint">{t("ProvidersCredentialHint")}</p>
     </section>
   );
