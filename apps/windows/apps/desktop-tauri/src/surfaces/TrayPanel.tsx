@@ -798,7 +798,15 @@ function QuotaCard({
           aria-expanded={expanded}
           onClick={onToggle}
         >
-          <span aria-hidden>⌄</span>
+          <svg
+            className="tokencue-tray__disclosure-icon"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden
+            focusable="false"
+          >
+            <path d="M4 6.25 8 10l4-3.75" />
+          </svg>
         </button>
       </div>
       <div className="tokencue-tray__track" aria-hidden>
@@ -1477,6 +1485,29 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
     setBillingHistory(readBillingHistoryMap(sorted));
   }, [settings.criticalUsageThreshold, settings.highUsageThreshold, sorted]);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollbarRef = useRef<HTMLDivElement>(null);
+  const scrollbarThumbRef = useRef<HTMLDivElement>(null);
+  const syncOverlayScrollbar = useCallback(() => {
+    const scroller = scrollRef.current;
+    const scrollbar = scrollbarRef.current;
+    const thumb = scrollbarThumbRef.current;
+    if (!scroller || !scrollbar || !thumb) return;
+
+    const overflow = scroller.scrollHeight - scroller.clientHeight;
+    const trackHeight = Math.max(0, scroller.clientHeight - 8);
+    const visible = overflow > 1 && trackHeight > 0;
+    scrollbar.dataset.visible = String(visible);
+    if (!visible) return;
+
+    const thumbHeight = Math.max(
+      28,
+      (trackHeight * scroller.clientHeight) / scroller.scrollHeight,
+    );
+    const maxThumbTop = Math.max(0, trackHeight - thumbHeight);
+    const scrollProgress = Math.min(1, Math.max(0, scroller.scrollTop / overflow));
+    thumb.style.height = `${thumbHeight}px`;
+    thumb.style.transform = `translateY(${maxThumbTop * scrollProgress}px)`;
+  }, []);
   const scrollPositionsRef = useRef<Record<TrayTabId, number>>({
     quota: 0,
     spend: 0,
@@ -1497,7 +1528,43 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollPositionsRef.current[tab];
     }
-  }, [tab]);
+    syncOverlayScrollbar();
+  }, [syncOverlayScrollbar, tab]);
+  useEffect(() => {
+    const scroller = scrollRef.current;
+    if (!scroller) return;
+
+    let animationFrame = 0;
+    const scheduleSync = () => {
+      if (typeof window.requestAnimationFrame !== "function") {
+        syncOverlayScrollbar();
+        return;
+      }
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(syncOverlayScrollbar);
+    };
+    const resizeObserver =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(scheduleSync);
+
+    resizeObserver?.observe(scroller);
+    for (const child of scroller.children) {
+      resizeObserver?.observe(child);
+    }
+    scroller.addEventListener("scroll", syncOverlayScrollbar, { passive: true });
+    window.addEventListener("resize", scheduleSync);
+    scheduleSync();
+
+    return () => {
+      if (typeof window.cancelAnimationFrame === "function") {
+        window.cancelAnimationFrame(animationFrame);
+      }
+      resizeObserver?.disconnect();
+      scroller.removeEventListener("scroll", syncOverlayScrollbar);
+      window.removeEventListener("resize", scheduleSync);
+    };
+  }, [expandedProviderId, sorted, syncOverlayScrollbar, tab]);
   // Footer switcher: jump back to the quota list and bring that provider's
   // expanded card into view once the tab has rendered.
   const [pendingFocus, setPendingFocus] = useState<string | null>(null);
@@ -1645,14 +1712,27 @@ export default function TrayPanel({ state }: { state: BootstrapState }) {
           ))}
         </nav>
 
-        <div
-          ref={scrollRef}
-          className="tokencue-tray__scroll"
-          role="tabpanel"
-          id={`tokencue-panel-${tab}`}
-          aria-labelledby={`tokencue-tab-${tab}`}
-        >
-          {body}
+        <div className="tokencue-tray__scroll-shell">
+          <div
+            ref={scrollRef}
+            className="tokencue-tray__scroll"
+            role="tabpanel"
+            id={`tokencue-panel-${tab}`}
+            aria-labelledby={`tokencue-tab-${tab}`}
+          >
+            {body}
+          </div>
+          <div
+            ref={scrollbarRef}
+            className="tokencue-tray__scrollbar"
+            data-visible="false"
+            aria-hidden="true"
+          >
+            <div
+              ref={scrollbarThumbRef}
+              className="tokencue-tray__scrollbar-thumb"
+            />
+          </div>
         </div>
 
         <footer className="tokencue-tray__footer">

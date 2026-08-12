@@ -244,13 +244,49 @@ select:focus-visible {
   font-weight: 600;
 }
 
-.tokencue-tray__scroll {
+.tokencue-tray__scroll-shell {
+  position: relative;
   min-height: 0;
   flex: 1;
+  overflow: hidden;
+}
+
+.tokencue-tray__scroll {
+  width: 100%;
+  height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-color: var(--tb-border) transparent;
-  scrollbar-width: thin;
+  overscroll-behavior-y: contain;
+  scrollbar-width: none;
+}
+
+.tokencue-tray__scroll::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.tokencue-tray__scrollbar {
+  position: absolute;
+  z-index: 2;
+  top: 4px;
+  right: 2px;
+  bottom: 4px;
+  width: 4px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.tokencue-tray__scrollbar[data-visible="true"] {
+  opacity: 1;
+}
+
+.tokencue-tray__scrollbar-thumb {
+  width: 100%;
+  min-height: 28px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--tb-text) 22%, transparent);
+  will-change: height, transform;
 }
 
 .tokencue-tray__body {
@@ -408,27 +444,41 @@ select:focus-visible {
 
 .tokencue-tray__disclosure {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   flex: none;
   place-items: center;
-  border-radius: 8px;
+  border-radius: 999px;
   color: var(--tb-muted) !important;
+  transition: color 120ms ease;
 }
 
 .tokencue-tray__disclosure:hover {
-  background: color-mix(in srgb, var(--tb-text) 6%, transparent) !important;
-  color: var(--tb-text) !important;
+  background: transparent !important;
+  color: var(--tb-color-accent) !important;
 }
 
-.tokencue-tray__disclosure span {
+.tokencue-tray__disclosure:active {
+  background: transparent !important;
+}
+
+.tokencue-tray__disclosure-icon {
   display: block;
-  font-size: 17px;
-  line-height: 1;
+  width: 13px;
+  height: 13px;
+  overflow: visible;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   transition: transform 140ms ease;
 }
 
-.tokencue-tray__disclosure[aria-expanded="true"] span {
+.tokencue-tray__disclosure[aria-expanded="true"] {
+  color: var(--tb-color-accent) !important;
+}
+
+.tokencue-tray__disclosure[aria-expanded="true"] .tokencue-tray__disclosure-icon {
   transform: rotate(180deg);
 }
 

@@ -694,7 +694,13 @@ describe("TokenCue handoff tray panel", () => {
       }),
     ]);
 
-    fireEvent.click(await screen.findByRole("button", { name: /Codex.*info/i }));
+    const disclosure = await screen.findByRole("button", { name: /Codex.*info/i });
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    expect(
+      disclosure.querySelector(".tokencue-tray__disclosure-icon"),
+    ).toBeInTheDocument();
+    fireEvent.click(disclosure);
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
 
     expect(await screen.findByText("Session")).toBeInTheDocument();
     expect(screen.getByText("Weekly")).toBeInTheDocument();
